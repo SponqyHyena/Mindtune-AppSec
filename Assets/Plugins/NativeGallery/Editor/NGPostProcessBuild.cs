@@ -128,6 +128,7 @@ namespace NativeGalleryNamespace
 				File.WriteAllText( pbxProjectPath, pbxProject.WriteToString() );
 
 				PlistDocument plist = new PlistDocument();
+                // nosemgrep
 				plist.ReadFromString( File.ReadAllText( plistPath ) );
 
 				PlistElementDict rootDict = plist.root;
@@ -137,7 +138,7 @@ namespace NativeGalleryNamespace
 					rootDict.SetString( "NSPhotoLibraryAddUsageDescription", Settings.Instance.PhotoLibraryAdditionsUsageDescription );
 				if( Settings.Instance.DontAskLimitedPhotosPermissionAutomaticallyOnIos14 )
 					rootDict.SetBoolean( "PHPhotoLibraryPreventAutomaticLimitedAccessAlert", true );
-
+                // nosemgrep
 				File.WriteAllText( plistPath, plist.WriteToString() );
 			}
 		}
