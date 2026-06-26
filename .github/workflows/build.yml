@@ -51,6 +51,7 @@ jobs:
         with:
           lfs: true
           fetch-depth: 0
+
       - name: Cache Unity Library
         uses: actions/cache@v4
         with:
@@ -61,8 +62,29 @@ jobs:
           restore-keys: |
             Library-${{ runner.os }}-
             Library-
+
+      - name: Cache Unity Global
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/unity
+          key: UnityGlobal-${{ runner.os }}-${{ hashFiles('ProjectSettings/ProjectVersion.txt') }}
+          restore-keys: |
+            UnityGlobal-${{ runner.os }}-
+
+      - name: Get Unity Version
+        id: unity_version
+        run: |
+          if [ -f "ProjectSettings/ProjectVersion.txt" ]; then
+            UNITY_VERSION=$(grep "m_EditorVersion:" ProjectSettings/ProjectVersion.txt | cut -d ' ' -f 2)
+            echo "unity_version=$UNITY_VERSION" >> $GITHUB_OUTPUT
+            echo "Using Unity version: $UNITY_VERSION"
+          else
+            echo "ProjectVersion.txt not found!"
+            exit 1
+          fi
+
       - name: Build Unity Project
-        uses: game-ci/unity-builder@v4.1.0
+        uses: game-ci/unity-builder@v5.0.0
         env:
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
@@ -73,6 +95,10 @@ jobs:
           ANDROID_KEYALIAS_PASS: ${{ secrets.ANDROID_KEYALIAS_PASS }}
         with:
           targetPlatform: Android
+          unityVersion: ${{ steps.unity_version.outputs.unity_version }}
+          buildMethod: YourNamespace.YourClass.BuildMethod
+          androidTargetSdkVersion: 33
+
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
         with:
