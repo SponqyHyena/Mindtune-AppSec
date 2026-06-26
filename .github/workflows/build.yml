@@ -63,6 +63,15 @@ jobs:
             Library-${{ runner.os }}-
             Library-
 
+      - name: Check Packages
+        run: |
+          if [ -f "Packages/manifest.json" ]; then
+            echo " Packages manifest found"
+            cat Packages/manifest.json | grep -E '"com.unity.' || true
+          else
+            echo " Packages/manifest.json not found!"
+          fi
+
       - name: Cache Unity Global
         uses: actions/cache@v4
         with:
@@ -95,8 +104,8 @@ jobs:
           ANDROID_KEYALIAS_PASS: ${{ secrets.ANDROID_KEYALIAS_PASS }}
         with:
           targetPlatform: Android
-          unityVersion: ${{ steps.unity_version.outputs.unity_version }}
-          buildMethod: YourNamespace.YourClass.BuildMethod
+          unityVersion: 6000.2.6f2
+          dockerImage: unityci/editor:ubuntu-6000.2.6f2-android-1
           androidTargetSdkVersion: 33
 
       - name: Upload Build Artifact
