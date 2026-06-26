@@ -51,12 +51,7 @@ jobs:
         with:
           lfs: true
           fetch-depth: 0
-      - name: Use DOTween as Plugin Instead of Package
-        run: |
-          if [ -f "Packages/manifest.json" ]; then
-            sed -i '/com.demigiant.dotween/d' Packages/manifest.json
-            echo " Removed DOTween from Package Manager"
-          fi
+      
       - name: Cache Unity Library
         uses: actions/cache@v4
         with:
@@ -100,8 +95,11 @@ jobs:
           ANDROID_KEYALIAS_PASS: ${{ secrets.ANDROID_KEYALIAS_PASS }}
         with:
           targetPlatform: Android
-          unityVersion: 6000.2.6f2
-          dockerImage: unityci/editor:ubuntu-6000.2.6f2-android-1
+          unityVersion: ${{ steps.unity_version.outputs.version }}
+          versioning: None
+          customParameters: |
+            -treatWarningsAsErrors=false
+            -buildVersion ${{ github.run_number }}
           androidTargetSdkVersion: 33
 
       - name: Upload Build Artifact
