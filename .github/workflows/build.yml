@@ -62,7 +62,7 @@ jobs:
             Library-${{ runner.os }}-
             Library-
       - name: Build Unity Project
-        uses: game-ci/unity-builder@v4.1.0
+        uses: game-ci/unity-builder@v5.0.0
         env:
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
