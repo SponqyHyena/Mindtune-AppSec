@@ -8,75 +8,75 @@ using UnityEditor.iOS.Xcode;
 
 namespace NativeGalleryNamespace
 {
-	[System.Serializable]
-	public class Settings
-	{
-		private const string SAVE_PATH = "ProjectSettings/NativeGallery.json";
+    [System.Serializable]
+    public class Settings
+    {
+        private const string SAVE_PATH = "ProjectSettings/NativeGallery.json";
 
-		public bool AutomatedSetup = true;
-		public string PhotoLibraryUsageDescription = "The app requires access to Photos to interact with it.";
-		public string PhotoLibraryAdditionsUsageDescription = "The app requires access to Photos to save media to it.";
-		public bool DontAskLimitedPhotosPermissionAutomaticallyOnIos14 = true; // See: https://mackuba.eu/2020/07/07/photo-library-changes-ios-14/
+        public bool AutomatedSetup = true;
+        public string PhotoLibraryUsageDescription = "The app requires access to Photos to interact with it.";
+        public string PhotoLibraryAdditionsUsageDescription = "The app requires access to Photos to save media to it.";
+        public bool DontAskLimitedPhotosPermissionAutomaticallyOnIos14 = true; // See: https://mackuba.eu/2020/07/07/photo-library-changes-ios-14/
 
-		private static Settings m_instance = null;
-		public static Settings Instance
-		{
-			get
-			{
-				if( m_instance == null )
-				{
-					try
-					{
-						if( File.Exists( SAVE_PATH ) )
-							m_instance = JsonUtility.FromJson<Settings>( File.ReadAllText( SAVE_PATH ) );
-						else
-							m_instance = new Settings();
-					}
-					catch( System.Exception e )
-					{
-						Debug.LogException( e );
-						m_instance = new Settings();
-					}
-				}
+        private static Settings m_instance = null;
+        public static Settings Instance
+        {
+            get
+            {
+                if (m_instance == null)
+                {
+                    try
+                    {
+                        if (File.Exists(SAVE_PATH))
+                            m_instance = JsonUtility.FromJson<Settings>(File.ReadAllText(SAVE_PATH));
+                        else
+                            m_instance = new Settings();
+                    }
+                    catch (System.Exception e)
+                    {
+                        Debug.LogException(e);
+                        m_instance = new Settings();
+                    }
+                }
 
-				return m_instance;
-			}
-		}
+                return m_instance;
+            }
+        }
 
-		public void Save()
-		{
-			File.WriteAllText( SAVE_PATH, JsonUtility.ToJson( this, true ) );
-		}
+        public void Save()
+        {
+            File.WriteAllText(SAVE_PATH, JsonUtility.ToJson(this, true));
+        }
 
-		[SettingsProvider]
-		public static SettingsProvider CreatePreferencesGUI()
-		{
-			return new SettingsProvider( "Project/yasirkula/Native Gallery", SettingsScope.Project )
-			{
-				guiHandler = ( searchContext ) => PreferencesGUI(),
-				keywords = new System.Collections.Generic.HashSet<string>() { "Native", "Gallery", "Android", "iOS" }
-			};
-		}
+        [SettingsProvider]
+        public static SettingsProvider CreatePreferencesGUI()
+        {
+            return new SettingsProvider("Project/yasirkula/Native Gallery", SettingsScope.Project)
+            {
+                guiHandler = (searchContext) => PreferencesGUI(),
+                keywords = new System.Collections.Generic.HashSet<string>() { "Native", "Gallery", "Android", "iOS" }
+            };
+        }
 
-		public static void PreferencesGUI()
-		{
-			EditorGUI.BeginChangeCheck();
+        public static void PreferencesGUI()
+        {
+            EditorGUI.BeginChangeCheck();
 
-			Instance.AutomatedSetup = EditorGUILayout.Toggle( "Automated Setup", Instance.AutomatedSetup );
+            Instance.AutomatedSetup = EditorGUILayout.Toggle("Automated Setup", Instance.AutomatedSetup);
 
-			EditorGUI.BeginDisabledGroup( !Instance.AutomatedSetup );
-			Instance.PhotoLibraryUsageDescription = EditorGUILayout.DelayedTextField( "Photo Library Usage Description", Instance.PhotoLibraryUsageDescription );
-			Instance.PhotoLibraryAdditionsUsageDescription = EditorGUILayout.DelayedTextField( "Photo Library Additions Usage Description", Instance.PhotoLibraryAdditionsUsageDescription );
-			Instance.DontAskLimitedPhotosPermissionAutomaticallyOnIos14 = EditorGUILayout.Toggle( new GUIContent( "Don't Ask Limited Photos Permission Automatically", "See: https://mackuba.eu/2020/07/07/photo-library-changes-ios-14/. It's recommended to keep this setting enabled" ), Instance.DontAskLimitedPhotosPermissionAutomaticallyOnIos14 );
-			EditorGUI.EndDisabledGroup();
+            EditorGUI.BeginDisabledGroup(!Instance.AutomatedSetup);
+            Instance.PhotoLibraryUsageDescription = EditorGUILayout.DelayedTextField("Photo Library Usage Description", Instance.PhotoLibraryUsageDescription);
+            Instance.PhotoLibraryAdditionsUsageDescription = EditorGUILayout.DelayedTextField("Photo Library Additions Usage Description", Instance.PhotoLibraryAdditionsUsageDescription);
+            Instance.DontAskLimitedPhotosPermissionAutomaticallyOnIos14 = EditorGUILayout.Toggle(new GUIContent("Don't Ask Limited Photos Permission Automatically", "See: https://mackuba.eu/2020/07/07/photo-library-changes-ios-14/. It's recommended to keep this setting enabled"), Instance.DontAskLimitedPhotosPermissionAutomaticallyOnIos14);
+            EditorGUI.EndDisabledGroup();
 
-			if( EditorGUI.EndChangeCheck() )
-				Instance.Save();
-		}
-	}
+            if (EditorGUI.EndChangeCheck())
+                Instance.Save();
+        }
+    }
 
-	public class NGPostProcessBuild
-	{
+    public class NGPostProcessBuild
+    {
 #if UNITY_IOS
 		[PostProcessBuild( 1 )]
 		public static void OnPostprocessBuild( BuildTarget target, string buildPath )
@@ -86,8 +86,35 @@ namespace NativeGalleryNamespace
 
 			if( target == BuildTarget.iOS )
 			{
+				if (string.IsNullOrEmpty(buildPath) || !Path.IsPathRooted(buildPath))
+				{
+					Debug.LogError("NGPostProcessBuild: Invalid build path provided.");
+					return;
+				}
+
+				string normalizedBuildPath = Path.GetFullPath(buildPath);
+				string currentDirectory = Directory.GetCurrentDirectory();
+				
+				if (!normalizedBuildPath.StartsWith(currentDirectory, System.StringComparison.OrdinalIgnoreCase))
+				{
+					Debug.LogError($"NGPostProcessBuild: Build path '{normalizedBuildPath}' is outside the project directory.");
+					return;
+				}
+
 				string pbxProjectPath = PBXProject.GetPBXProjectPath( buildPath );
 				string plistPath = Path.Combine( buildPath, "Info.plist" );
+
+				if (!File.Exists(pbxProjectPath))
+				{
+					Debug.LogError($"NGPostProcessBuild: PBX project file not found at '{pbxProjectPath}'");
+					return;
+				}
+
+				if (!File.Exists(plistPath))
+				{
+					Debug.LogError($"NGPostProcessBuild: Info.plist file not found at '{plistPath}'");
+					return;
+				}
 
 				PBXProject pbxProject = new PBXProject();
 				pbxProject.ReadFromFile( pbxProjectPath );
@@ -115,5 +142,5 @@ namespace NativeGalleryNamespace
 			}
 		}
 #endif
-	}
+    }
 }
