@@ -13,7 +13,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Gitleaks scan
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
       - name: Semgrep scan
         uses: semgrep/semgrep-action@v1
         with:
