@@ -51,7 +51,12 @@ jobs:
         with:
           lfs: true
           fetch-depth: 0
-
+      - name: Use DOTween as Plugin Instead of Package
+        run: |
+          if [ -f "Packages/manifest.json" ]; then
+            sed -i '/com.demigiant.dotween/d' Packages/manifest.json
+            echo " Removed DOTween from Package Manager"
+          fi
       - name: Cache Unity Library
         uses: actions/cache@v4
         with:
@@ -62,15 +67,6 @@ jobs:
           restore-keys: |
             Library-${{ runner.os }}-
             Library-
-
-      - name: Check Packages
-        run: |
-          if [ -f "Packages/manifest.json" ]; then
-            echo " Packages manifest found"
-            cat Packages/manifest.json | grep -E '"com.unity.' || true
-          else
-            echo " Packages/manifest.json not found!"
-          fi
 
       - name: Cache Unity Global
         uses: actions/cache@v4
