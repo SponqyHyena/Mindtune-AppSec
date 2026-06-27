@@ -66,22 +66,24 @@ jobs:
       - name: Cache Unity Global
         uses: actions/cache@v4
         with:
-          path: ~/.cache/unity
+          path: C:\ProgramData\Unity
           key: UnityGlobal-${{ runner.os }}-${{ hashFiles('ProjectSettings/ProjectVersion.txt') }}
           restore-keys: |
             UnityGlobal-${{ runner.os }}-
 
       - name: Get Unity Version
         id: unity_version
+        shell: pwsh
         run: |
-          if [ -f "ProjectSettings/ProjectVersion.txt" ]; then
-            UNITY_VERSION=$(grep "m_EditorVersion:" ProjectSettings/ProjectVersion.txt | cut -d ' ' -f 2)
-            echo "unity_version=$UNITY_VERSION" >> $GITHUB_OUTPUT
-            echo "Using Unity version: $UNITY_VERSION"
-          else
+          if (Test-Path "ProjectSettings/ProjectVersion.txt") {
+            $content = Get-Content "ProjectSettings/ProjectVersion.txt"
+            $version = ($content | Select-String "m_EditorVersion:").ToString().Split(' ')[1]
+            echo "unity_version=$version" >> $env:GITHUB_OUTPUT
+            echo "Using Unity version: $version"
+          } else {
             echo "ProjectVersion.txt not found!"
             exit 1
-          fi
+          }
 
       - name: Build Unity Project
         uses: game-ci/unity-builder@v5.0.0
