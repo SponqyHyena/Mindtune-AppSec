@@ -1,12 +1,8 @@
 {
-    "name": "Test Assembly",
+    "name": "GameScripts",
     "rootNamespace": "",
-    "references": [
-        "GameScripts"
-    ],
-    "includePlatforms": [
-        "Editor"
-    ],
+    "references": [],
+    "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
     "overrideReferences": false,
