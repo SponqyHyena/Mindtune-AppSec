@@ -112,8 +112,7 @@ jobs:
     needs: tests
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-      packages: write
+      contents: write
     
     steps:
       - name: Checkout code
@@ -178,6 +177,7 @@ jobs:
           androidKeyaliasName: ${{ secrets.ANDROID_KEYALIAS_NAME }}
           androidKeyaliasPass: ${{ secrets.ANDROID_KEYALIAS_PASS }}
           androidTargetSdkVersion: 33
+          buildName: Mindtune
 
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v7
