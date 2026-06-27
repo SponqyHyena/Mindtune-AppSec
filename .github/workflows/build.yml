@@ -85,30 +85,47 @@ jobs:
             echo "ProjectVersion.txt not found!"
             exit 1
           fi
+      - name: Activate Unity License
+        run: |
+          /opt/unity/Editor/Unity \
+            -batchmode \
+            -quit \
+            -username "${{ secrets.UNITY_EMAIL }}" \
+            -password "${{ secrets.UNITY_PASSWORD }}" \
+            -serial "${{ secrets.UNITY_LICENSE }}" \
+            -logFile -
+            
       - name: Build Unity Project
-        uses: game-ci/unity-builder@v5.0.0
-        env:
-          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
-          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
-          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
-          MONO_IO_OPTIONS: UseMmap=1
-          MONO_THREADS_SUSPEND: preemptive
-        with:
-          projectPath: .
-          targetPlatform: Android
-          unityVersion: ${{ steps.unity_version.outputs.unity_version }}
-          versioning: None
-          androidKeystoreName: release.keystore
-          androidKeystoreBase64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          androidKeystorePass: ${{ secrets.ANDROID_KEYSTORE_PASS }}
-          androidKeyaliasName: ${{ secrets.ANDROID_KEYALIAS_NAME }}
-          androidKeyaliasPass: ${{ secrets.ANDROID_KEYALIAS_PASS }}
-          androidTargetSdkVersion: 33
-          buildMethod: BuildScript.PerformBuild
+        run: |
+          mkdir -p build/Android
           
+          /opt/unity/Editor/Unity \
+            -batchmode \
+            -quit \
+            -projectPath "$(pwd)" \
+            -buildTarget Android \
+            -buildPath "$(pwd)/build/Android/Android.apk" \
+            -logFile build.log
+          
+          if [ -f "build/Android/Android.apk" ]; then
+            echo "Build successful! APK created."
+            ls -la build/Android/
+          else
+            echo "Build failed! APK not found."
+            cat build.log
+            exit 1
+          fi
 
       - name: Upload Build Artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: app-build
           path: build/Android
+          
+      - name: Upload Build Log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
