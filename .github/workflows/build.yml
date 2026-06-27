@@ -38,8 +38,78 @@ jobs:
           output: semgrep.sarif
           generateSarif: "1"
 
-  build:
+  tests:
     needs: security
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          lfs: true
+          fetch-depth: 0
+
+      - name: Increase file descriptor limit
+        run: |
+          echo "=== Increasing file descriptor limit ==="
+          ulimit -n 4096
+          echo "New file descriptor limit: $(ulimit -n)"
+
+      - name: Cache Unity Library
+        uses: actions/cache@v4
+        with:
+          path: |
+            Library
+            Temp
+          key: Library-${{ runner.os }}-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+          restore-keys: |
+            Library-${{ runner.os }}-
+            Library-
+
+      - name: Cache Unity Global
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/unity
+          key: UnityGlobal-${{ runner.os }}-${{ hashFiles('ProjectSettings/ProjectVersion.txt') }}
+          restore-keys: |
+            UnityGlobal-${{ runner.os }}-
+
+      - name: Get Unity Version
+        id: unity_version
+        run: |
+          if [ -f "ProjectSettings/ProjectVersion.txt" ]; then
+            UNITY_VERSION=$(grep "m_EditorVersion:" ProjectSettings/ProjectVersion.txt | cut -d ' ' -f 2)
+            echo "unity_version=$UNITY_VERSION" >> $GITHUB_OUTPUT
+            echo "Using Unity version: $UNITY_VERSION"
+          else
+            echo "ProjectVersion.txt not found!"
+            exit 1
+          fi
+
+      - name: Run Unity Tests
+        uses: game-ci/unity-test-runner@v4
+        env:
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+        with:
+          projectPath: .
+          unityVersion: ${{ steps.unity_version.outputs.unity_version }}
+          testMode: all
+          artifactsPath: test-artifacts
+          customParameters: -testFilter SecurityTests
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: test-artifacts
+
+  build:
+    needs: tests
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -104,7 +174,6 @@ jobs:
           androidKeyaliasName: ${{ secrets.ANDROID_KEYALIAS_NAME }}
           androidKeyaliasPass: ${{ secrets.ANDROID_KEYALIAS_PASS }}
           androidTargetSdkVersion: 33
-          
 
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
