@@ -25,22 +25,6 @@ jobs:
           fetch-depth: 0
           lfs: true
 
-      - name: Free disk space
-        shell: pwsh
-        run: |
-          
-          docker system prune -a -f
-          
-          Remove-Item -Path "C:\Windows\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "C:\Users\*\AppData\Local\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
-          
-          if (Get-Command CleanMgr.exe -ErrorAction SilentlyContinue) {
-            CleanMgr.exe /sagerun:1 | Out-Null
-          }
-         
-          Remove-Item -Path "C:\Users\*\Downloads\*" -Recurse -Force -ErrorAction SilentlyContinue
-          
-
       - name: Gitleaks scan
         uses: gitleaks/gitleaks-action@v3
         env:
