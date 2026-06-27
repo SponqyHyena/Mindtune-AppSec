@@ -102,11 +102,10 @@ jobs:
           androidKeystorePass: ${{ secrets.ANDROID_KEYSTORE_PASS }}
           androidKeyaliasName: ${{ secrets.ANDROID_KEYALIAS_NAME }}
           androidKeyaliasPass: ${{ secrets.ANDROID_KEYALIAS_PASS }}
-          #customParameters: |
-            #-treatWarningsAsErrors=false
-            #-ignoreCompilerErrors
+          customParameters: |
+            -executeMethod BuildScript.PerformBuild
           androidTargetSdkVersion: 33
-          buildMethod: StandardBuild
+          
 
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
