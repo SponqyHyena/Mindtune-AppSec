@@ -5,10 +5,20 @@ public static class BuildScript
 {
 	public static void PerformBuild()
 	{
+		Debug.Log("=== Starting Android Build ===");
+
 		string[] scenes = { "Assets/Scenes/MainScene.unity" };
 		string buildPath = "build/Android/Android.apk";
 
-		BuildPipeline.BuildPlayer(scenes, buildPath, BuildTarget.Android, BuildOptions.None);
-		Debug.Log("Build completed successfully!");
+		BuildPlayerOptions options = new BuildPlayerOptions
+		{
+			scenes = scenes,
+			locationPathName = buildPath,
+			target = BuildTarget.Android,
+			options = BuildOptions.None
+		};
+
+		BuildPipeline.BuildPlayer(options);
+		Debug.Log("=== Build completed successfully ===");
 	}
 }

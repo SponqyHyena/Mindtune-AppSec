@@ -102,9 +102,8 @@ jobs:
           androidKeystorePass: ${{ secrets.ANDROID_KEYSTORE_PASS }}
           androidKeyaliasName: ${{ secrets.ANDROID_KEYALIAS_NAME }}
           androidKeyaliasPass: ${{ secrets.ANDROID_KEYALIAS_PASS }}
-          customParameters: |
-            -executeMethod BuildScript.PerformBuild
           androidTargetSdkVersion: 33
+          buildMethod: BuildScript.PerformBuild
           
 
       - name: Upload Build Artifact
