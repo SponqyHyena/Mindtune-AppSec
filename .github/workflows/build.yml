@@ -99,7 +99,6 @@ jobs:
           versioning: None
           customParameters: |
             -ignoreCompilerErrors
-            -buildVersion ${{ github.run_number }}
           androidTargetSdkVersion: 33
 
       - name: Upload Build Artifact
