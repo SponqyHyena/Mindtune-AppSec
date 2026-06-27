@@ -28,10 +28,6 @@ jobs:
       - name: Free disk space
         shell: pwsh
         run: |
-          Write-Host "=== Checking disk space BEFORE cleanup ==="
-          Get-PSDrive -Name C
-          
-          Write-Host "=== Cleaning up disk space ==="
           
           docker system prune -a -f
           
