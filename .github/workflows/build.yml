@@ -94,6 +94,7 @@ jobs:
           MONO_IO_OPTIONS: UseMmap=1
           MONO_THREADS_SUSPEND: preemptive
         with:
+          projectPath: .
           targetPlatform: Android
           unityVersion: ${{ steps.unity_version.outputs.unity_version }}
           versioning: None
