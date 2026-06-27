@@ -100,7 +100,6 @@ jobs:
           customParameters: |
             -ignoreCompilerErrors
             -disableManagedDebugger
-            -buildVersion none
           androidTargetSdkVersion: 33
 
       - name: Upload Build Artifact
