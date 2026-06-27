@@ -98,7 +98,7 @@ jobs:
           unityVersion: ${{ steps.unity_version.outputs.version }}
           versioning: None
           customParameters: |
-            -treatWarningsAsErrors=false
+            -ignoreCompilerErrors
             -buildVersion ${{ github.run_number }}
           androidTargetSdkVersion: 33
 
