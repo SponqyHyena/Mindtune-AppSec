@@ -24,6 +24,29 @@ jobs:
         with:
           fetch-depth: 0
           lfs: true
+
+      - name: Free disk space
+        shell: pwsh
+        run: |
+          Write-Host "=== Checking disk space BEFORE cleanup ==="
+          Get-PSDrive -Name C
+          
+          Write-Host "=== Cleaning up disk space ==="
+          
+          docker system prune -a -f
+          
+          Remove-Item -Path "C:\Windows\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\Users\*\AppData\Local\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
+          
+          if (Get-Command CleanMgr.exe -ErrorAction SilentlyContinue) {
+            CleanMgr.exe /sagerun:1 | Out-Null
+          }
+         
+          Remove-Item -Path "C:\Users\*\Downloads\*" -Recurse -Force -ErrorAction SilentlyContinue
+          
+          Write-Host "=== Disk space AFTER cleanup ==="
+          Get-PSDrive -Name C
+
       - name: Gitleaks scan
         uses: gitleaks/gitleaks-action@v3
         env:
@@ -97,7 +120,7 @@ jobs:
           ANDROID_KEYALIAS_PASS: ${{ secrets.ANDROID_KEYALIAS_PASS }}
         with:
           targetPlatform: Android
-          unityVersion: ${{ steps.unity_version.outputs.version }}
+          unityVersion: ${{ steps.unity_version.outputs.unity_version }}
           versioning: None
           customParameters: |
             -ignoreCompilerErrors
