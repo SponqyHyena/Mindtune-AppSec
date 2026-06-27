@@ -1,16 +1,16 @@
-name: Build
+name: Release
 
 permissions:
-  contents: read
-  security-events: write 
-  pull-requests: write
+  contents: write
+  pull-requests: read
   actions: read
-  checks: write
+  checks: read
+
 on:
   push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+    tags:
+      - 'v*.*.*'
+
 jobs:
   security:
     runs-on: ubuntu-latest
@@ -107,7 +107,6 @@ jobs:
         with:
           name: test-results
           path: test-artifacts
-          retention-days: 30
 
   build:
     needs: tests
@@ -122,6 +121,19 @@ jobs:
         with:
           lfs: true
           fetch-depth: 0
+
+      - name: Get Unity Version
+        id: unity_version
+        run: |
+          if [ -f "ProjectSettings/ProjectVersion.txt" ]; then
+            UNITY_VERSION=$(grep "m_EditorVersion:" ProjectSettings/ProjectVersion.txt | cut -d ' ' -f 2)
+            echo "unity_version=$UNITY_VERSION" >> $GITHUB_OUTPUT
+            echo "Using Unity version: $UNITY_VERSION"
+          else
+            echo "ProjectVersion.txt not found!"
+            exit 1
+          fi
+
       - name: Increase file descriptor limit
         run: |
           echo "=== Increasing file descriptor limit ==="
@@ -138,6 +150,7 @@ jobs:
           restore-keys: |
             Library-${{ runner.os }}-
             Library-
+
       - name: Cache Unity Global
         uses: actions/cache@v4
         with:
@@ -145,17 +158,7 @@ jobs:
           key: UnityGlobal-${{ runner.os }}-${{ hashFiles('ProjectSettings/ProjectVersion.txt') }}
           restore-keys: |
             UnityGlobal-${{ runner.os }}-
-      - name: Get Unity Version
-        id: unity_version
-        run: |
-          if [ -f "ProjectSettings/ProjectVersion.txt" ]; then
-            UNITY_VERSION=$(grep "m_EditorVersion:" ProjectSettings/ProjectVersion.txt | cut -d ' ' -f 2)
-            echo "unity_version=$UNITY_VERSION" >> $GITHUB_OUTPUT
-            echo "Using Unity version: $UNITY_VERSION"
-          else
-            echo "ProjectVersion.txt not found!"
-            exit 1
-          fi
+
       - name: Build Unity Project
         uses: game-ci/unity-builder@v5.0.0
         env:
@@ -175,11 +178,31 @@ jobs:
           androidKeyaliasName: ${{ secrets.ANDROID_KEYALIAS_NAME }}
           androidKeyaliasPass: ${{ secrets.ANDROID_KEYALIAS_PASS }}
           androidTargetSdkVersion: 33
-          buildName: Mindtune
 
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v7
         with:
           name: app-build
           path: build/Android
-          retention-days: 7
+
+      - name: Find APK file
+        id: find_apk
+        run: |
+          APK_FILE=$(find build/Android -name "*.apk" | head -n 1)
+          if [ -z "$APK_FILE" ]; then
+            echo "No APK file found!"
+            exit 1
+          fi
+          echo "apk_path=$APK_FILE" >> $GITHUB_OUTPUT
+          echo "Found APK: $APK_FILE"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ steps.find_apk.outputs.apk_path }}
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
