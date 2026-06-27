@@ -106,6 +106,7 @@ jobs:
             #-treatWarningsAsErrors=false
             #-ignoreCompilerErrors
           androidTargetSdkVersion: 33
+          buildMethod: StandardBuild
 
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
