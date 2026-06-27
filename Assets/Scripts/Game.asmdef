@@ -6,7 +6,8 @@
         "Unity.TextMeshPro.Editor",
         "TextMeshPro",
         "TextMeshPro.Editor",
-        "NativeGallery.Editor"
+        "NativeGallery.Editor",
+        "NativeGallery.Runtime"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

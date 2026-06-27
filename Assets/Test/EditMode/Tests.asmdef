@@ -2,7 +2,9 @@
     "name": "Test Assembly",
     "rootNamespace": "",
     "references": [
-        "GameScripts"
+        "GameScripts",
+        "NativeGallery.Editor",
+        "NativeGallery.Runtime"
     ],
     "includePlatforms": [
         "Editor"
