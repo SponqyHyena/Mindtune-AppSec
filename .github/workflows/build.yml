@@ -57,7 +57,7 @@ jobs:
 
   build:
     needs: security
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
@@ -68,13 +68,21 @@ jobs:
         with:
           lfs: true
           fetch-depth: 0
-      
+
+      - name: Increase system limits
+        run: |
+          echo "=== Increasing system limits ==="
+          ulimit -n 4096
+          echo "File descriptor limit: $(ulimit -n)"
+          echo "Max user processes: $(ulimit -u)"
+         
+          sudo sysctl -w fs.file-max=65536 2>/dev/null || true
+          echo "fs.file-max: $(cat /proc/sys/fs/file-max)"
+
       - name: Cache Unity Library
         uses: actions/cache@v4
         with:
-          path: |
-            Library
-            Temp
+          path: Library
           key: Library-${{ runner.os }}-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
           restore-keys: |
             Library-${{ runner.os }}-
@@ -83,24 +91,23 @@ jobs:
       - name: Cache Unity Global
         uses: actions/cache@v4
         with:
-          path: C:\ProgramData\Unity
+          path: ~/.cache/unity
           key: UnityGlobal-${{ runner.os }}-${{ hashFiles('ProjectSettings/ProjectVersion.txt') }}
           restore-keys: |
             UnityGlobal-${{ runner.os }}-
 
       - name: Get Unity Version
         id: unity_version
-        shell: pwsh
         run: |
-          if (Test-Path "ProjectSettings/ProjectVersion.txt") {
-            $content = Get-Content "ProjectSettings/ProjectVersion.txt"
-            $version = ($content | Select-String "m_EditorVersion:").ToString().Split(' ')[1]
-            echo "unity_version=$version" >> $env:GITHUB_OUTPUT
-            echo "Using Unity version: $version"
-          } else {
+          if [ -f "ProjectSettings/ProjectVersion.txt" ]; then
+            VERSION=$(grep "m_EditorVersion:" ProjectSettings/ProjectVersion.txt | cut -d ' ' -f 2)
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "Unity version: $VERSION"
+          else
             echo "ProjectVersion.txt not found!"
             exit 1
-          }
+          fi
+
 
       - name: Build Unity Project
         uses: game-ci/unity-builder@v5.0.0
@@ -108,6 +115,8 @@ jobs:
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          MONO_IO_OPTIONS: UseMmap=1
+          MONO_THREADS_SUSPEND: preemptive
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
           ANDROID_KEYALIAS_NAME: ${{ secrets.ANDROID_KEYALIAS_NAME }}
