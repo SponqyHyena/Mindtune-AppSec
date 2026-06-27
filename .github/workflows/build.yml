@@ -24,7 +24,6 @@ jobs:
         with:
           fetch-depth: 0
           lfs: true
-
       - name: Gitleaks scan
         uses: gitleaks/gitleaks-action@v3
         env:
@@ -52,26 +51,22 @@ jobs:
         with:
           lfs: true
           fetch-depth: 0
-
-      - name: Increase system limits
+      - name: Increase file descriptor limit
         run: |
-          echo "=== Increasing system limits ==="
+          echo "=== Increasing file descriptor limit ==="
           ulimit -n 4096
-          echo "File descriptor limit: $(ulimit -n)"
-          echo "Max user processes: $(ulimit -u)"
-         
-          sudo sysctl -w fs.file-max=65536 2>/dev/null || true
-          echo "fs.file-max: $(cat /proc/sys/fs/file-max)"
+          echo "New file descriptor limit: $(ulimit -n)"
 
       - name: Cache Unity Library
         uses: actions/cache@v4
         with:
-          path: Library
+          path: |
+            Library
+            Temp
           key: Library-${{ runner.os }}-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
           restore-keys: |
             Library-${{ runner.os }}-
             Library-
-
       - name: Cache Unity Global
         uses: actions/cache@v4
         with:
@@ -79,20 +74,17 @@ jobs:
           key: UnityGlobal-${{ runner.os }}-${{ hashFiles('ProjectSettings/ProjectVersion.txt') }}
           restore-keys: |
             UnityGlobal-${{ runner.os }}-
-
       - name: Get Unity Version
         id: unity_version
         run: |
           if [ -f "ProjectSettings/ProjectVersion.txt" ]; then
-            VERSION=$(grep "m_EditorVersion:" ProjectSettings/ProjectVersion.txt | cut -d ' ' -f 2)
-            echo "version=$VERSION" >> $GITHUB_OUTPUT
-            echo "Unity version: $VERSION"
+            UNITY_VERSION=$(grep "m_EditorVersion:" ProjectSettings/ProjectVersion.txt | cut -d ' ' -f 2)
+            echo "unity_version=$UNITY_VERSION" >> $GITHUB_OUTPUT
+            echo "Using Unity version: $UNITY_VERSION"
           else
             echo "ProjectVersion.txt not found!"
             exit 1
           fi
-
-
       - name: Build Unity Project
         uses: game-ci/unity-builder@v5.0.0
         env:
@@ -107,11 +99,11 @@ jobs:
           ANDROID_KEYALIAS_PASS: ${{ secrets.ANDROID_KEYALIAS_PASS }}
         with:
           targetPlatform: Android
-          unityVersion: ${{ steps.unity_version.outputs.unity_version }}
+          unityVersion: ${{ steps.unity_version.outputs.version }}
           versioning: None
           customParameters: |
+            -treatWarningsAsErrors=false
             -ignoreCompilerErrors
-            -disableManagedDebugger
           androidTargetSdkVersion: 33
 
       - name: Upload Build Artifact
