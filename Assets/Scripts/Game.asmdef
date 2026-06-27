@@ -3,10 +3,7 @@
     "rootNamespace": "",
     "references": [
         "Unity.TextMeshPro",
-        "Unity.TextMeshPro.Editor",
         "TextMeshPro",
-        "TextMeshPro.Editor",
-        "NativeGallery.Editor",
         "NativeGallery.Runtime"
     ],
     "includePlatforms": [],
@@ -17,6 +14,5 @@
     "autoReferenced": true,
     "defineConstraints": [],
     "versionDefines": [],
-    "noEngineReferences": false,
-    "includeAssetPath": "Assets/Scripts/**/*.cs"
+    "noEngineReferences": false
 }
