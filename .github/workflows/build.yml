@@ -44,8 +44,6 @@ jobs:
          
           Remove-Item -Path "C:\Users\*\Downloads\*" -Recurse -Force -ErrorAction SilentlyContinue
           
-          Write-Host "=== Disk space AFTER cleanup ==="
-          Get-PSDrive -Name C
 
       - name: Gitleaks scan
         uses: gitleaks/gitleaks-action@v3
