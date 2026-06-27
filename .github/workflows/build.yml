@@ -95,8 +95,9 @@ jobs:
           MONO_THREADS_SUSPEND: preemptive
         with:
           targetPlatform: Android
-          unityVersion: ${{ steps.unity_version.outputs.version }}
+          unityVersion: ${{ steps.unity_version.outputs.unity_version }}
           versioning: None
+          androidKeystoreName: release.keystore
           androidKeystoreBase64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           androidKeystorePass: ${{ secrets.ANDROID_KEYSTORE_PASS }}
           androidKeyaliasName: ${{ secrets.ANDROID_KEYALIAS_NAME }}
