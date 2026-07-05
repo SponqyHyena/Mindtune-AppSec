@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using TMPro;
 using UnityEngine;
@@ -15,7 +16,7 @@ public class AvatarManager : MonoBehaviour
 
     [Header("UI References")]
     [SerializeField] private TMP_Text errorText;
-    [SerializeField] private GameObject errorPanel; 
+    [SerializeField] private GameObject errorPanel;
     [SerializeField] private float errorDisplayTime = 5f;
 
     private const string AvatarFolder = "avatars";
@@ -30,6 +31,18 @@ public class AvatarManager : MonoBehaviour
     private static AvatarManager instance;
     private Coroutine errorCoroutine;
 
+#if UNITY_WEBGL && !UNITY_EDITOR
+    [DllImport("__Internal")]
+    private static extern void WebGLOpenFilePicker(
+        string gameObjectName, string callbackMethod, int maxSizeBytes);
+
+    [DllImport("__Internal")]
+    private static extern string WebGLFetchAvatarData();
+
+    [DllImport("__Internal")]
+    private static extern string WebGLFetchAvatarError();
+#endif
+
     private void Awake()
     {
         if (instance == null)
@@ -40,6 +53,7 @@ public class AvatarManager : MonoBehaviour
         if (errorPanel != null)
             errorPanel.SetActive(false);
     }
+
 
     public static void LoadAvatarForCurrentUser()
     {
@@ -56,116 +70,173 @@ public class AvatarManager : MonoBehaviour
             return;
         }
 
-        string avatarPath = GetAvatarPath(userId);
-
-        if (!File.Exists(avatarPath))
-        {
-            DebugLogger.Log("[AvatarManager] No avatar found for user");
-            return;
-        }
-
-        try
-        {
-            FileInfo fileInfo = new FileInfo(avatarPath);
-            if (fileInfo.Length > MaxFileSizeBytes)
-            {
-                ShowError($"Файл слишком большой: {fileInfo.Length / 1024} KB (макс. {MaxFileSizeBytes / 1024} KB)");
-                File.Delete(avatarPath);
-                return;
-            }
-
-            string extension = Path.GetExtension(avatarPath).ToLowerInvariant();
-            if (!AllowedExtensions.Contains(extension))
-            {
-                ShowError($"Неподдерживаемый формат: {extension}");
-                File.Delete(avatarPath);
-                return;
-            }
-
-            byte[] bytes = File.ReadAllBytes(avatarPath);
-
-            if (!IsValidImage(bytes))
-            {
-                ShowError("Файл поврежден или не является изображением");
-                File.Delete(avatarPath);
-                return;
-            }
-
-            Texture2D tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-
-            if (tex.LoadImage(bytes))
-            {
-                ApplyAvatar(tex);
-                ShowSuccess("Фото профиля загружено");
-            }
-            else
-            {
-                ShowError("Не удалось загрузить изображение");
-                Destroy(tex);
-            }
-        }
-        catch (Exception e)
-        {
-            ShowError($"Ошибка загрузки: {e.Message}");
-            DebugLogger.LogError($"[AvatarManager] Avatar load error: {e.Message}");
-        }
+#if UNITY_WEBGL && !UNITY_EDITOR
+        LoadAvatarWebGL(userId);
+#else
+        LoadAvatarFromFile(userId);
+#endif
     }
+
 
     public void LoadImageFromGallery()
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        Debug.Log($"[AvatarManager] LoadImageFromGallery WebGL, gameObject.name='{gameObject.name}'");
+        WebGLOpenFilePicker(gameObject.name, "OnWebGLImageLoaded", MaxFileSizeBytes);
+#elif UNITY_ANDROID
+        RequestAndroidPermissionsAndOpenGallery();
+#elif UNITY_IOS
+        OpenNativeGallery();
+#else
+        ShowError("Выбор фото недоступен на этой платформе");
+#endif
+    }
+
+    public void OnWebGLImageLoaded(string _)
+    {
+#if UNITY_WEBGL && !UNITY_EDITOR
+
+        string base64 = WebGLFetchAvatarData();
+
+        if (string.IsNullOrEmpty(base64))
+        {
+            ShowError("Ошибка получения данных изображения");
+            return;
+        }
+
+        byte[] bytes;
+        try
+        {
+            bytes = Convert.FromBase64String(base64);
+        }
+        catch (FormatException ex)
+        {
+            ShowError("Ошибка декодирования изображения");
+            return;
+        }
+
+        if (bytes.Length > MaxFileSizeBytes)
+        {
+            ShowError($"Файл слишком большой: {bytes.Length / 1024} KB (макс. {MaxFileSizeBytes / 1024} KB)");
+            return;
+        }
+
+        if (!IsValidImage(bytes))
+        {
+            ShowError("Файл повреждён или не является изображением PNG/JPG");
+            return;
+        }
+
+
+        Texture2D tex = null;
+        try
+        {
+            tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+            bool loaded = tex.LoadImage(bytes);
+
+            if (!loaded)
+            {
+                ShowError("Не удалось декодировать изображение");
+                Destroy(tex);
+                return;
+            }
+
+            if (tex.width == 0 || tex.height == 0)
+            {
+                ShowError("Изображение повреждено (нулевые размеры)");
+                Destroy(tex);
+                return;
+            }
+
+
+            SaveAvatarWebGL(bytes, UserManager.CurrentUser.UserID);
+            ApplyAvatar(tex);
+            ShowSuccess("Фото профиля обновлено!");
+
+            var userManager = FindFirstObjectByType<UserManager>();
+            if (userManager != null)
+                userManager.SaveUsersData();
+        }
+        catch (Exception e)
+        {
+            ShowError($"Ошибка обработки изображения: {e.Message}");
+            if (tex != null) Destroy(tex);
+        }
+#endif
+    }
+
+    public void OnWebGLPickerError(string _)
+    {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        string errorCode = WebGLFetchAvatarError() ?? "UNKNOWN";
+
+        if (errorCode.StartsWith("TOO_LARGE:"))
+        {
+            long.TryParse(errorCode.Substring("TOO_LARGE:".Length), out long size);
+            ShowError($"Файл слишком большой: {size / 1024} KB (макс. {MaxFileSizeBytes / 1024} KB)");
+        }
+        else if (errorCode.StartsWith("INVALID_TYPE:"))
+        {
+            string type = errorCode.Substring("INVALID_TYPE:".Length);
+            ShowError($"Неподдерживаемый формат: {type}. Используйте PNG или JPG");
+        }
+        else if (errorCode.StartsWith("READ_ERROR:"))
+        {
+            ShowError("Ошибка чтения файла. Попробуйте другой файл");
+        }
+        else
+        {
+            ShowError("Ошибка при загрузке файла");
+        }
+#endif
+    }
+
+    public void OnWebGLPickerCancelled(string _)
+    {
+        Debug.Log("WebGL file picker cancelled");
+    }
+
+
 #if UNITY_ANDROID
+    private void RequestAndroidPermissionsAndOpenGallery()
+    {
         if (Application.platform == RuntimePlatform.Android)
         {
-            var permissions = new string[]
+            var permissions = new[]
             {
-            "android.permission.READ_MEDIA_IMAGES",
-            "android.permission.READ_EXTERNAL_STORAGE"
+                "android.permission.READ_MEDIA_IMAGES",
+                "android.permission.READ_EXTERNAL_STORAGE"
             };
-
             foreach (var perm in permissions)
             {
                 if (!UnityEngine.Android.Permission.HasUserAuthorizedPermission(perm))
-                {
                     UnityEngine.Android.Permission.RequestUserPermission(perm);
-                }
             }
         }
+        OpenNativeGallery();
+    }
 #endif
 
 #if UNITY_ANDROID || UNITY_IOS
-
+    private void OpenNativeGallery()
+    {
         NativeGallery.GetImageFromGallery((path) =>
         {
-            if (string.IsNullOrEmpty(path))
+            if (string.IsNullOrEmpty(path)) { ShowError("Файл не выбран"); return; }
+            if (!IsSafePath(path)) { ShowError("Некорректный путь к файлу"); return; }
+            if (!File.Exists(path)) { ShowError("Файл не найден"); return; }
+
+            FileInfo fi = new FileInfo(path);
+            if (fi.Length > MaxFileSizeBytes)
             {
-                ShowError("Файл не выбран");
+                ShowError($"Файл слишком большой: {fi.Length / 1024} KB (макс. {MaxFileSizeBytes / 1024} KB)");
                 return;
             }
 
-            DebugLogger.Log($"[AvatarManager] Selected path: {path}");
-
-            if (!IsSafePath(path))
+            string ext = Path.GetExtension(path).ToLowerInvariant();
+            if (!AllowedExtensions.Contains(ext))
             {
-                ShowError("Некорректный путь к файлу");
-                return;
-            }
-
-            if (!File.Exists(path))
-            {
-                ShowError("Файл не найден");
-                return;
-            }
-
-            FileInfo fileInfo = new FileInfo(path);
-            if (fileInfo.Length > MaxFileSizeBytes)
-            {
-                ShowError($"Файл слишком большой: {fileInfo.Length / 1024} KB (макс. {MaxFileSizeBytes / 1024} KB)");
-                return;
-            }
-            string extension = Path.GetExtension(path).ToLowerInvariant();
-            if (!AllowedExtensions.Contains(extension))
-            {
-                ShowError($"Неподдерживаемый формат: {extension}. Используйте PNG или JPG");
+                ShowError($"Неподдерживаемый формат: {ext}. Используйте PNG или JPG");
                 return;
             }
 
@@ -173,165 +244,219 @@ public class AvatarManager : MonoBehaviour
             try
             {
                 tex = LoadImageWithFallback(path);
-
-                if (tex == null)
-                {
-                    ShowError("Не удалось загрузить изображение. Попробуйте другой файл");
-                    return;
-                }
-
-                if (tex.width == 0 || tex.height == 0)
-                {
-                    ShowError("Изображение повреждено");
-                    Destroy(tex);
-                    return;
-                }
+                if (tex == null) { ShowError("Не удалось загрузить изображение"); return; }
+                if (tex.width == 0 || tex.height == 0) { ShowError("Изображение повреждено"); Destroy(tex); return; }
 
                 if (tex.width > MaxAvatarSize || tex.height > MaxAvatarSize)
                 {
-                    Texture2D resized = ResizeTexture(tex, MaxAvatarSize, MaxAvatarSize);
+                    Texture2D r = ResizeTexture(tex, MaxAvatarSize, MaxAvatarSize);
                     Destroy(tex);
-                    tex = resized;
+                    tex = r;
                 }
 
                 SaveAvatarToFile(tex, UserManager.CurrentUser.UserID);
                 LoadAvatarForCurrentUser();
                 ShowSuccess("Фото профиля обновлено!");
 
-                var userManager = UnityEngine.Object.FindFirstObjectByType<UserManager>();
-                if (userManager != null)
-                    userManager.SaveUsersData();
-
+                var um = FindFirstObjectByType<UserManager>();
+                if (um != null) um.SaveUsersData();
                 Destroy(tex);
             }
             catch (Exception e)
             {
                 ShowError($"Ошибка обработки: {e.Message}");
-                DebugLogger.LogError($"[AvatarManager] Error processing image: {e.Message}");
                 if (tex != null) Destroy(tex);
             }
         }, "Выберите фото профиля", "image/*");
-#else
-        ShowError("Доступ к галерее доступен только на мобильных устройствах");
-        Debug.LogWarning("Gallery access only on Android/iOS");
-#endif
     }
 
     private static Texture2D LoadImageWithFallback(string path)
     {
-        Texture2D tex = null;
-
         try
         {
-            tex = NativeGallery.LoadImageAtPath(path, MaxAvatarSize, false);
-            if (tex != null && tex.width > 0 && tex.height > 0)
-            {
-                DebugLogger.Log("[AvatarManager] Image loaded via NativeGallery");
-                return tex;
-            }
+            Texture2D t = NativeGallery.LoadImageAtPath(path, MaxAvatarSize, false);
+            if (t != null && t.width > 0) return t;
         }
-        catch (Exception e)
-        {
-            DebugLogger.LogWarning($"[AvatarManager] NativeGallery load failed: {e.Message}");
-        }
+        catch (Exception e) { DebugLogger.LogWarning($"NativeGallery failed: {e.Message}"); }
 
         try
         {
             byte[] bytes = File.ReadAllBytes(path);
-            tex = new Texture2D(2, 2);
-            if (tex.LoadImage(bytes))
+            if (!IsValidImage(bytes)) return null;
+            Texture2D t = new Texture2D(2, 2);
+            if (t.LoadImage(bytes))
             {
-                if (tex.width > MaxAvatarSize || tex.height > MaxAvatarSize)
-                {
-                    tex = ResizeTexture(tex, MaxAvatarSize, MaxAvatarSize);
-                }
-                DebugLogger.Log("[AvatarManager] Image loaded via File.ReadAllBytes");
-                return tex;
+                if (t.width > MaxAvatarSize || t.height > MaxAvatarSize)
+                    t = ResizeTexture(t, MaxAvatarSize, MaxAvatarSize);
+                return t;
             }
+        }
+        catch (Exception e) { DebugLogger.LogWarning($"ReadAllBytes failed: {e.Message}"); }
+
+        return null;
+    }
+#endif
+
+
+    private static void LoadAvatarFromFile(string userId)
+    {
+        string path = GetAvatarPath(userId);
+        if (!File.Exists(path)) { DebugLogger.Log("[AvatarManager] No avatar file"); return; }
+
+        try
+        {
+            FileInfo fi = new FileInfo(path);
+            if (fi.Length > MaxFileSizeBytes) { File.Delete(path); ShowError("Файл слишком большой"); return; }
+
+            string ext = Path.GetExtension(path).ToLowerInvariant();
+            if (!AllowedExtensions.Contains(ext)) { File.Delete(path); ShowError($"Неподдерживаемый формат: {ext}"); return; }
+
+            byte[] bytes = File.ReadAllBytes(path);
+            if (!IsValidImage(bytes)) { File.Delete(path); ShowError("Файл повреждён"); return; }
+
+            Texture2D tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+            if (tex.LoadImage(bytes)) ApplyAvatar(tex);
+            else { ShowError("Не удалось загрузить изображение"); Destroy(tex); }
         }
         catch (Exception e)
         {
-            DebugLogger.LogWarning($"[AvatarManager] File.ReadAllBytes failed: {e.Message}");
+            ShowError($"Ошибка загрузки: {e.Message}");
         }
-
-        return null;
     }
 
     private static void SaveAvatarToFile(Texture2D texture, string userId)
     {
+        string safeId = SanitizeUserId(userId);
+        if (string.IsNullOrEmpty(safeId)) throw new ArgumentException("Invalid user ID");
+
+        string folder = Path.Combine(Application.persistentDataPath, AvatarFolder);
+        if (!Directory.Exists(folder)) Directory.CreateDirectory(folder);
+
+        string filePath = GetAvatarPath(safeId);
+        if (!Path.GetFullPath(filePath).StartsWith(Path.GetFullPath(folder)))
+            throw new SecurityException("Path traversal detected");
+
+        byte[] png = texture.EncodeToPNG();
+        if (png.Length > MaxFileSizeBytes) throw new Exception($"Avatar too large: {png.Length}");
+        File.WriteAllBytes(filePath, png);
+    }
+
+
+    private static void LoadAvatarWebGL(string userId)
+    {
+#if UNITY_WEBGL && !UNITY_EDITOR
         try
         {
-            string safeUserId = SanitizeUserId(userId);
-            if (string.IsNullOrEmpty(safeUserId))
+            string folder = Path.Combine(Application.persistentDataPath, AvatarFolder);
+            string filePath = Path.Combine(folder, $"{userId}.img");
+
+            if (!File.Exists(filePath))
             {
-                throw new ArgumentException("Invalid user ID");
+                return;
             }
 
-            string folderPath = Path.Combine(Application.persistentDataPath, AvatarFolder);
+            byte[] bytes = File.ReadAllBytes(filePath);
 
-            if (!Directory.Exists(folderPath))
+            if (bytes.Length > MaxFileSizeBytes)
             {
-                Directory.CreateDirectory(folderPath);
+                File.Delete(filePath);
+                ShowError("Сохранённый аватар слишком большой");
+                return;
             }
 
-            string filePath = GetAvatarPath(safeUserId);
-
-            string fullPath = Path.GetFullPath(filePath);
-            string fullFolder = Path.GetFullPath(folderPath);
-            if (!fullPath.StartsWith(fullFolder))
+            if (!IsValidImage(bytes))
             {
-                throw new SecurityException("Path traversal detected");
+                File.Delete(filePath);
+                ShowError("Сохранённый аватар повреждён");
+                return;
             }
 
-            byte[] pngData = texture.EncodeToPNG();
-
-            if (pngData.Length > MaxFileSizeBytes)
+            Texture2D tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+            if (tex.LoadImage(bytes))
+                ApplyAvatar(tex);
+            else
             {
-                throw new Exception($"Avatar too large: {pngData.Length} bytes");
+                ShowError("Не удалось загрузить сохранённый аватар");
+                Destroy(tex);
             }
-
-            File.WriteAllBytes(filePath, pngData);
-
-            DebugLogger.Log($"[AvatarManager] Avatar saved: {filePath}");
         }
         catch (Exception e)
         {
-            ShowError($"Ошибка сохранения: {e.Message}");
-            DebugLogger.LogError($"[AvatarManager] Failed to save avatar: {e.Message}");
-            throw;
+            ShowError($"Ошибка загрузки аватара: {e.Message}");
+        }
+#endif
+    }
+
+
+    private static void SaveAvatarWebGL(byte[] imageBytes, string userId)
+    {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        string safeId = SanitizeUserId(userId);
+        if (string.IsNullOrEmpty(safeId)) throw new ArgumentException("Invalid user ID");
+        if (imageBytes == null || imageBytes.Length == 0) throw new ArgumentException("Empty image bytes");
+
+        string folder = Path.Combine(Application.persistentDataPath, AvatarFolder);
+        if (!Directory.Exists(folder)) Directory.CreateDirectory(folder);
+
+        string filePath = Path.Combine(folder, $"{safeId}.img");
+
+        if (!Path.GetFullPath(filePath).StartsWith(Path.GetFullPath(folder)))
+            throw new SecurityException("Path traversal detected");
+
+        File.WriteAllBytes(filePath, imageBytes);
+#endif
+    }
+
+
+    public static void DeleteAvatar(string userId)
+    {
+        try
+        {
+            string safeId = SanitizeUserId(userId);
+            if (string.IsNullOrEmpty(safeId)) return;
+
+#if UNITY_WEBGL && !UNITY_EDITOR
+            string webGLFolder = Path.Combine(Application.persistentDataPath, AvatarFolder);
+            string webGLPath = Path.Combine(webGLFolder, $"{safeId}.img");
+            if (File.Exists(webGLPath)) File.Delete(webGLPath);
+#else
+            string path = GetAvatarPath(safeId);
+            if (File.Exists(path)) File.Delete(path);
+#endif
+            if (currentAvatar != null)
+            {
+                if (currentAvatar.texture != null) UnityEngine.Object.Destroy(currentAvatar.texture);
+                UnityEngine.Object.Destroy(currentAvatar);
+                currentAvatar = null;
+            }
+            ShowSuccess("Аватар удалён");
+        }
+        catch (Exception e)
+        {
+            ShowError($"Ошибка удаления: {e.Message}");
         }
     }
 
-    private static string GetAvatarPath(string userId)
-    {
-        string folder = Path.Combine(Application.persistentDataPath, AvatarFolder);
-        return Path.Combine(folder, $"{userId}.png");
-    }
+
+    private static string GetAvatarPath(string userId) =>
+        Path.Combine(Application.persistentDataPath, AvatarFolder, $"{userId}.png");
 
     private static string SanitizeUserId(string userId)
     {
         if (string.IsNullOrEmpty(userId)) return null;
-        string sanitized = Regex.Replace(userId, @"[^a-zA-Z0-9\-]", "");
-        if (sanitized.Length > 100)
-            sanitized = sanitized.Substring(0, 100);
-        return sanitized;
+        string s = Regex.Replace(userId, @"[^a-zA-Z0-9\-]", "");
+        return s.Length > 100 ? s.Substring(0, 100) : s;
     }
 
     private static bool IsSafePath(string path)
     {
         if (string.IsNullOrEmpty(path)) return false;
-
         try
         {
-            string normalizedPath = Path.GetFullPath(path);
-
-            string extension = Path.GetExtension(path).ToLowerInvariant();
-            return AllowedExtensions.Contains(extension);
+            Path.GetFullPath(path);
+            return AllowedExtensions.Contains(Path.GetExtension(path).ToLowerInvariant());
         }
-        catch
-        {
-            return false;
-        }
+        catch { return false; }
     }
 
     private static bool IsValidImage(byte[] data)
@@ -340,172 +465,93 @@ public class AvatarManager : MonoBehaviour
 
         if (data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47 &&
             data[4] == 0x0D && data[5] == 0x0A && data[6] == 0x1A && data[7] == 0x0A)
-        {
             return true;
-        }
 
         if (data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF)
-        {
             return true;
-        }
-
         return false;
     }
 
-    private static Texture2D ResizeTexture(Texture2D source, int targetWidth, int targetHeight)
+    private static Texture2D ResizeTexture(Texture2D source, int targetW, int targetH)
     {
         if (source == null) throw new ArgumentNullException(nameof(source));
-        if (targetWidth <= 0 || targetHeight <= 0) throw new ArgumentException("Invalid target dimensions");
+        if (targetW <= 0 || targetH <= 0) throw new ArgumentException("Invalid target dimensions");
 
-        RenderTexture rt = RenderTexture.GetTemporary(targetWidth, targetHeight);
-        rt.filterMode = FilterMode.Bilinear;
+        Texture2D result = new Texture2D(targetW, targetH, TextureFormat.RGBA32, false);
+        Color[] dst = new Color[targetW * targetH];
 
-        RenderTexture.active = rt;
-        Graphics.Blit(source, rt);
+        float invW = 1f / (targetW > 1 ? targetW - 1 : 1);
+        float invH = 1f / (targetH > 1 ? targetH - 1 : 1);
 
-        Texture2D result = new Texture2D(targetWidth, targetHeight, TextureFormat.RGBA32, false);
-        result.ReadPixels(new Rect(0, 0, targetWidth, targetHeight), 0, 0);
+        for (int y = 0; y < targetH; y++)
+        {
+            float v = y * invH;
+            for (int x = 0; x < targetW; x++)
+            {
+                dst[y * targetW + x] = source.GetPixelBilinear(x * invW, v);
+            }
+        }
+
+        result.SetPixels(dst);
         result.Apply();
-
-        RenderTexture.active = null;
-        RenderTexture.ReleaseTemporary(rt);
-
         return result;
     }
 
     private static void ApplyAvatar(Texture2D tex)
     {
-        if (tex == null)
-        {
-            ShowError("Не удалось создать изображение");
-            return;
-        }
-
-        Rect rect = new Rect(0, 0, tex.width, tex.height);
-        Vector2 pivot = new Vector2(0.5f, 0.5f);
-
-        Sprite newSprite = Sprite.Create(tex, rect, pivot);
-
+        if (tex == null) { ShowError("Не удалось создать изображение"); return; }
+        Sprite s = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f));
         if (currentAvatar != null)
         {
-            if (currentAvatar.texture != null)
-                UnityEngine.Object.Destroy(currentAvatar.texture);
+            if (currentAvatar.texture != null) UnityEngine.Object.Destroy(currentAvatar.texture);
             UnityEngine.Object.Destroy(currentAvatar);
         }
-
-        currentAvatar = newSprite;
-        OnAvatarChanged?.Invoke(newSprite);
-
+        currentAvatar = s;
+        OnAvatarChanged?.Invoke(s);
         HideError();
     }
 
-    public static void DeleteAvatar(string userId)
+
+    private static void ShowError(string msg)
     {
-        try
-        {
-            string safeUserId = SanitizeUserId(userId);
-            if (string.IsNullOrEmpty(safeUserId)) return;
-
-            string path = GetAvatarPath(safeUserId);
-            if (File.Exists(path))
-            {
-                File.Delete(path);
-                DebugLogger.Log($"[AvatarManager] Avatar deleted: {path}");
-            }
-
-            if (currentAvatar != null)
-            {
-                if (currentAvatar.texture != null)
-                    UnityEngine.Object.Destroy(currentAvatar.texture);
-                UnityEngine.Object.Destroy(currentAvatar);
-                currentAvatar = null;
-            }
-
-            ShowSuccess("Аватар удален");
-        }
-        catch (Exception e)
-        {
-            ShowError($"Ошибка удаления: {e.Message}");
-            DebugLogger.LogError($"[AvatarManager] Failed to delete avatar: {e.Message}");
-        }
+        OnAvatarError?.Invoke(msg);
+        instance?.ShowErrorUI(msg);
     }
 
-    private static void ShowError(string message)
+    private void ShowErrorUI(string msg)
     {
-        DebugLogger.LogError($"[UI Error] {message}");
-        OnAvatarError?.Invoke(message);
-
-        if (instance != null)
-        {
-            instance.ShowErrorUI(message);
-        }
-    }
-
-    private void ShowErrorUI(string message)
-    {
-        if (errorText != null)
-        {
-            errorText.text = message;
-        }
-
+        if (errorText != null) errorText.text = msg;
         if (errorPanel != null)
         {
             errorPanel.SetActive(true);
-
-            if (errorCoroutine != null)
-                StopCoroutine(errorCoroutine);
+            if (errorCoroutine != null) StopCoroutine(errorCoroutine);
             errorCoroutine = StartCoroutine(HideErrorAfterDelay(errorDisplayTime));
         }
     }
 
-    private static void ShowSuccess(string message)
+    private static void ShowSuccess(string msg)
     {
-        DebugLogger.Log($"[UI Success] {message}");
-
-        if (instance != null)
-        {
-            instance.ShowSuccessUI(message);
-        }
+        instance?.ShowSuccessUI(msg);
     }
 
-    private void ShowSuccessUI(string message)
+    private void ShowSuccessUI(string msg)
     {
-        if (errorText != null)
-        {
-            errorText.text = message;
-        }
-
+        if (errorText != null) errorText.text = msg;
         if (errorPanel != null)
         {
             errorPanel.SetActive(true);
-
-            if (errorCoroutine != null)
-                StopCoroutine(errorCoroutine);
+            if (errorCoroutine != null) StopCoroutine(errorCoroutine);
             errorCoroutine = StartCoroutine(HideErrorAfterDelay(errorDisplayTime));
         }
     }
 
-    private static void HideError()
-    {
-        if (instance != null)
-        {
-            instance.HideErrorUI();
-        }
-    }
+    private static void HideError() => instance?.HideErrorUI();
 
     private void HideErrorUI()
     {
-        if (errorPanel != null)
-            errorPanel.SetActive(false);
-
-        if (errorText != null)
-            errorText.text = "";
-
-        if (errorCoroutine != null)
-        {
-            StopCoroutine(errorCoroutine);
-            errorCoroutine = null;
-        }
+        if (errorPanel != null) errorPanel.SetActive(false);
+        if (errorText != null) errorText.text = "";
+        if (errorCoroutine != null) { StopCoroutine(errorCoroutine); errorCoroutine = null; }
     }
 
     private System.Collections.IEnumerator HideErrorAfterDelay(float delay)
@@ -518,8 +564,7 @@ public class AvatarManager : MonoBehaviour
     {
         if (currentAvatar != null)
         {
-            if (currentAvatar.texture != null)
-                UnityEngine.Object.Destroy(currentAvatar.texture);
+            if (currentAvatar.texture != null) UnityEngine.Object.Destroy(currentAvatar.texture);
             UnityEngine.Object.Destroy(currentAvatar);
             currentAvatar = null;
         }
