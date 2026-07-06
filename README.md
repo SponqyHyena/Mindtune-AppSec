@@ -9,7 +9,7 @@
   
 https://github.com/user-attachments/assets/ddc65b6c-650d-4cd2-9a8b-014735373581
 
-[![Play WebGL Demo](https://img.shields.io/badge/🎮_TRY_LIVE_DEMO-00C853?style=for-the-badge&logo=unity&logoColor=white&labelColor=000000)](https://yourusername.github.io/your-repo/)
+[![Play WebGL Demo](https://img.shields.io/badge/🎮_TRY_LIVE_DEMO-00C853?style=for-the-badge&logo=unity&logoColor=white&labelColor=000000)](https://sponqyhyena.github.io/Mindtune-AppSec/)
 
 </div>
 
