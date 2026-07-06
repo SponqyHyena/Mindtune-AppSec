@@ -105,7 +105,7 @@ Derive the encryption key from the user's actual password using PBKDF2-SHA256 wi
 
 Accepted trade-off: data is irrecoverable if the password is forgotten — standard and expected behaviour for local-only encrypted storage.
 
-Tracked in: [Issue #1](../../issues/1)
+Tracked in: [Issue #1](https://github.com/SponqyHyena/Mindtune-AppSec/issues/8)
 
 ---
 
@@ -119,7 +119,7 @@ Tracked in: [Issue #1](../../issues/1)
 
 **Planned fix (v1.1):** Encrypt the index with a key stored in the Android Keystore (hardware-backed TEE where available).
 
-Tracked in: [Issue #2](../../issues/2)
+Tracked in: [Issue #2](https://github.com/SponqyHyena/Mindtune-AppSec/issues/9)
 
 ---
 
@@ -133,7 +133,7 @@ Tracked in: [Issue #2](../../issues/2)
 
 **Planned fix (v1.2):** Replace AES-CBC with **AES-GCM** (AEAD — confidentiality and integrity in one primitive). Available via `System.Security.Cryptography.AesGcm` in .NET Standard 2.1.
 
-Tracked in: [Issue #3](../../issues/3)
+Tracked in: [Issue #3](https://github.com/SponqyHyena/Mindtune-AppSec/issues/10)
 
 ---
 
