@@ -18,12 +18,14 @@ jobs:
       contents: read
       security-events: write
       pull-requests: write
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
           lfs: true
+
       - name: Gitleaks scan
         uses: gitleaks/gitleaks-action@v3
         env:
@@ -31,13 +33,43 @@ jobs:
         with:
           enable-comments: true
           enable-summary: true
+
       - name: Semgrep scan
         uses: semgrep/semgrep-action@v1
         with:
-          config: p/csharp
+          config: |
+            p/csharp
+            p/javascript
+            p/owasp-top-ten
           output: semgrep.sarif
           generateSarif: "1"
 
+      - name: Security Code Scan
+        run: |
+          dotnet tool install --global security-scan --version 5.6.7
+          security-scan Assets/Scripts/Security/ \
+            --export=scs-report.sarif \
+            --no-banner \
+            || true
+
+      - name: Upload Security Code Scan results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: scs-report.sarif
+          category: security-code-scan
+
+      - name: DevSkim scan
+        uses: microsoft/DevSkim-Action@v1
+        with:
+          directory-to-scan: Assets/Scripts/
+
+      - name: Upload DevSkim results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: devskim-results.sarif
+          category: devskim
   tests:
     needs: security
     runs-on: ubuntu-latest
