@@ -33,51 +33,31 @@ jobs:
         with:
           fetch-depth: 2
 
+      - name: Remap .jslib to .js for CodeQL
+        if: matrix.language == 'javascript-typescript'
+        run: |
+          find . -name "*.jslib" -not -path "./.git/*" | while read f; do
+            cp "$f" "${f%.jslib}.js"
+            echo "Remapped: $f → ${f%.jslib}.js"
+          done
+
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
           queries: security-and-quality
-
           config: |
-            query-filters:
-              - exclude:
-                  tags contain: "correctness"
-                  severity: recommendation
-            paths:
-              - Assets/Scripts
-              - Assets/Plugins
-              - Assets/WebGLTemplates
             paths-ignore:
-              - Assets/Scripts/UI
               - "**/*.meta"
               - Library
               - Temp
               - Logs
               - obj
-            library-path:
-              javascript:
-                extensions:
-                  - jslib
-
-      - if: matrix.build-mode == 'manual'
-        name: Build
-        shell: bash
-        run: |
-          echo "Manual build not configured for this language."
-          exit 1
+              - build
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
         with:
           category: "/language:${{ matrix.language }}"
-          output: codeql-results-${{ matrix.language }}.sarif
           upload: always
-
-      - name: Upload SARIF artifact
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: codeql-sarif-${{ matrix.language }}
-          path: codeql-results-${{ matrix.language }}.sarif
-          retention-days: 30
