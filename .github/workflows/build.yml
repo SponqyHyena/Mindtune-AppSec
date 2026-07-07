@@ -90,7 +90,7 @@ jobs:
           echo "New file descriptor limit: $(ulimit -n)"
 
       - name: Cache Unity Library
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             Library
@@ -101,7 +101,7 @@ jobs:
             Library-
 
       - name: Cache Unity Global
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/unity
           key: UnityGlobal-${{ runner.os }}-${{ hashFiles('ProjectSettings/ProjectVersion.txt') }}
@@ -161,7 +161,7 @@ jobs:
           echo "New file descriptor limit: $(ulimit -n)"
 
       - name: Cache Unity Library
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             Library
@@ -171,7 +171,7 @@ jobs:
             Library-${{ runner.os }}-
             Library-
       - name: Cache Unity Global
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/unity
           key: UnityGlobal-${{ runner.os }}-${{ hashFiles('ProjectSettings/ProjectVersion.txt') }}
