@@ -53,7 +53,7 @@ jobs:
             || true
 
       - name: Upload Security Code Scan results
-        uses: github/codeql-action/upload-sarif@v4
+        uses: github/codeql-action/upload-sarif@v4.37.3
         if: always() && hashFiles('scs-report.sarif') != ''
         with:
           sarif_file: scs-report.sarif
@@ -65,7 +65,7 @@ jobs:
           directory-to-scan: Assets/Scripts/
 
       - name: Upload DevSkim results
-        uses: github/codeql-action/upload-sarif@v4 
+        uses: github/codeql-action/upload-sarif@v4.37.3 
         if: always() && hashFiles('devskim-results.sarif') != ''
         with:
           sarif_file: devskim-results.sarif
