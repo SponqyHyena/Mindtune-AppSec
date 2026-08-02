@@ -152,7 +152,7 @@ Tracked in: [Issue #3](https://github.com/SponqyHyena/Mindtune-AppSec/issues/10)
 | Secret scanning (CI) | Gitleaks on every push and PR | ✅ Done |
 | SAST (CI) | Semgrep `p/csharp` on every push and PR | ✅ Done |
 | Dependency monitoring | Dependabot — `github-actions` ecosystem | ✅ Done |
-| Encryption key from user password | Currently derived from non-secret identifiers | ⚠️ v1.1 |
+| Encryption key from user password | Currently derived from non-secret identifiers | ✅ Done |
 | Metadata index encryption | Currently plaintext in PlayerPrefs | ⚠️ v1.1 |
 | Authenticated encryption (AEAD) | Currently CBC without integrity check | ⚠️ v1.2 |
 | Android Keystore integration | Not implemented | 🔲 v1.1 |
