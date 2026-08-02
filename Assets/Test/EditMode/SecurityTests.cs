@@ -117,6 +117,29 @@ public class SecurityTests
         Assert.AreEqual(testData.IsActive, loadedData.IsActive, "Булевы значения должны сохраняться.");
     }
 
+    [Test]
+    public void MetadataProtector_RoundTrip_EncryptsAndDecryptsCorrectly()
+    {
+        string original = "{\"Users\":[{\"Username\":\"alice\"}]}";
+
+        string encrypted = MetadataProtector.Encrypt(original);
+        Assert.AreNotEqual(original, encrypted, "Зашифрованные данные не должны совпадать с исходными.");
+
+        bool ok = MetadataProtector.TryDecrypt(encrypted, out string decrypted);
+        Assert.IsTrue(ok, "Расшифровка должна пройти успешно.");
+        Assert.AreEqual(original, decrypted, "Расшифрованные данные должны совпадать с исходными.");
+    }
+
+    [Test]
+    public void MetadataProtector_LegacyPlaintext_FailsToDecryptGracefully()
+    {
+        string legacyPlaintextJson = "{\"Users\":[]}";
+
+        bool ok = MetadataProtector.TryDecrypt(legacyPlaintextJson, out string decrypted);
+
+        Assert.IsFalse(ok, "Plaintext JSON не должен приниматься за зашифрованный формат.");
+    }
+
     [Serializable]
     private class TestData
     {

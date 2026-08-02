@@ -79,31 +79,9 @@ The following issues are **known, documented, and tracked**. They are listed her
 
 ---
 
-### ISSUE-1 · Encryption key derived from non-secret identifiers (Medium)
+### ISSUE-1 · Encryption key derived from non-secret identifiers (Medium) 
 
-**Location:** `Assets/Scripts/Security/SecureStorage.cs` — `GetEncryptionPassword()`
-
-**Description:**
-
-```csharp
-// Current implementation
-byte[] combined = Encoding.UTF8.GetBytes(userId + Application.identifier);
-byte[] hash = sha256.ComputeHash(combined);
-```
-
-The AES-256 key is derived deterministically from two non-secret values:
-
-- `Application.identifier` — the app bundle ID, visible to anyone who unpacks the APK with `apktool`.
-- `userId` — a GUID stored in plaintext in `PlayerPrefs` as part of the user index.
-
-An attacker who obtains a copy of the device's data directory (rooted device, unencrypted ADB backup, forensic image) already has both inputs and can recompute the key without knowing the user's password. The `.enc` files can then be decrypted without brute-force.
-
-**Impact:** Full confidentiality loss of diary and mood data for a filesystem-level attacker. The user's password itself remains protected (hashed separately by PBKDF2; the hash is inside the now-decryptable file, but the password is not recoverable from the hash without brute force).
-
-**Planned fix (v1.1):**
-Derive the encryption key from the user's actual password using PBKDF2-SHA256 with a persisted per-user salt. The password is available at login and can be threaded through to the key derivation layer without major architectural changes.
-
-Accepted trade-off: data is irrecoverable if the password is forgotten — standard and expected behaviour for local-only encrypted storage.
+Status: Fixed
 
 Tracked in: [Issue #1](https://github.com/SponqyHyena/Mindtune-AppSec/issues/8)
 
@@ -111,13 +89,7 @@ Tracked in: [Issue #1](https://github.com/SponqyHyena/Mindtune-AppSec/issues/8)
 
 ### ISSUE-2 · User metadata index unencrypted in PlayerPrefs (Low)
 
-**Location:** `Assets/Scripts/Managers/UserManager.cs` — `SaveUsersList()`
-
-**Description:** A user index (username, email, display name, role, UserID) is written to `PlayerPrefs` as plaintext JSON. On Android this maps to an XML `SharedPreferences` file, which is readable on rooted devices without any key.
-
-**Impact:** PII metadata accessible to filesystem-level attackers without decryption. Diary content is not affected.
-
-**Planned fix (v1.1):** Encrypt the index with a key stored in the Android Keystore (hardware-backed TEE where available).
+Status: Fixed
 
 Tracked in: [Issue #2](https://github.com/SponqyHyena/Mindtune-AppSec/issues/9)
 
@@ -141,20 +113,20 @@ Tracked in: [Issue #3](https://github.com/SponqyHyena/Mindtune-AppSec/issues/10)
 
 | Control | Implementation | Status |
 |---|---|---|
-| Password hashing | PBKDF2-SHA256, 32B random salt, 100k iterations, `FixedTimeEquals` | ✅ Done |
-| Data encryption at rest | AES-256-CBC, random salt + IV per write | ✅ Done |
-| JSON deserialization safety | `TypeNameHandling.None` — prevents `$type` injection (Json.NET RCE class) | ✅ Done |
-| Input validation | Compiled regex on all auth fields | ✅ Done |
-| XSS-char sanitization | Strip `<>"'&;` from free-text before persist | ✅ Done |
-| File magic-byte validation | PNG / JPEG header check before image load | ✅ Done |
-| Path traversal prevention | `GetFullPath()` boundary check in `AvatarManager` | ✅ Done |
-| Debug log stripping | `[Conditional("DEVELOPMENT_BUILD")]` — zero cost in release | ✅ Done |
-| Secret scanning (CI) | Gitleaks on every push and PR | ✅ Done |
-| SAST (CI) | Semgrep `p/csharp` on every push and PR | ✅ Done |
-| Dependency monitoring | Dependabot — `github-actions` ecosystem | ✅ Done |
-| Encryption key from user password | Currently derived from non-secret identifiers | ⚠️ v1.1 |
-| Metadata index encryption | Currently plaintext in PlayerPrefs | ⚠️ v1.1 |
+| Password hashing | PBKDF2-SHA256, 32B random salt, 100k iterations, `FixedTimeEquals` | [x] Done |
+| Data encryption at rest | AES-256-CBC, random salt + IV per write | [x] Done |
+| JSON deserialization safety | `TypeNameHandling.None` — prevents `$type` injection (Json.NET RCE class) | [x] Done |
+| Input validation | Compiled regex on all auth fields | [x] Done |
+| XSS-char sanitization | Strip `<>"'&;` from free-text before persist | [x] Done |
+| File magic-byte validation | PNG / JPEG header check before image load | [x] Done |
+| Path traversal prevention | `GetFullPath()` boundary check in `AvatarManager` | [x] Done |
+| Debug log stripping | `[Conditional("DEVELOPMENT_BUILD")]` — zero cost in release | [x] Done |
+| Secret scanning (CI) | Gitleaks on every push and PR | [x] Done |
+| SAST (CI) | Semgrep `p/csharp` on every push and PR | [x] Done |
+| Dependency monitoring | Dependabot — `github-actions` ecosystem | [x] Done |
+| Encryption key from user password | PBKDF2 from user password + transparent migration of legacy files after password verification | [x] Done (v1.1) |
+| Metadata index encryption | encrypted with an AES-256-GCM key from the AndroidKeyStore | [x] Done (v1.1) |
 | Authenticated encryption (AEAD) | Currently CBC without integrity check | ⚠️ v1.2 |
-| Android Keystore integration | Not implemented | 🔲 v1.1 |
-| Biometric unlock | Not implemented | 🔲 v1.3 |
-| UPM package monitoring | Not covered by Dependabot — manual review required | 🔲 Ongoing |
+| Android Keystore integration | file fallback key | [x] Done |
+| Biometric unlock | Not implemented | [ ] v1.3 |
+| UPM package monitoring | Not covered by Dependabot — manual review required | [ ] Ongoing |

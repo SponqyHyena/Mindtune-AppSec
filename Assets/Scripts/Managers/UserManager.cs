@@ -33,7 +33,15 @@ public class UserManager : MonoBehaviour
 
         try
         {
-            string json = PlayerPrefs.GetString(USERS_LIST_KEY);
+            string stored = PlayerPrefs.GetString(USERS_LIST_KEY);
+
+            string json;
+            bool wasLegacyPlaintext = !MetadataProtector.TryDecrypt(stored, out json);
+            if (wasLegacyPlaintext)
+            {
+                // Формат до фикса ISSUE-2 — обычный JSON без шифрования
+                json = stored;
+            }
 
             var userMetaList = SecureJsonSerializer.Deserialize<UserMetaList>(json);
 
@@ -56,6 +64,12 @@ public class UserManager : MonoBehaviour
                         };
                         usersCache[meta.Username] = dummyUser;
                     }
+                }
+
+                if (wasLegacyPlaintext && usersCache.Count > 0)
+                {
+                    SaveUsersList();
+                    Debug.Log("[UserManager] Encrypted plaintext metadata index (ISSUE-2 upgrade)");
                 }
             }
         }
@@ -193,7 +207,8 @@ public class UserManager : MonoBehaviour
         string json = SecureJsonSerializer.Serialize(metaList);
         if (!string.IsNullOrEmpty(json))
         {
-            PlayerPrefs.SetString(USERS_LIST_KEY, json);
+            string encrypted = MetadataProtector.Encrypt(json);
+            PlayerPrefs.SetString(USERS_LIST_KEY, encrypted);
             PlayerPrefs.Save();
         }
     }

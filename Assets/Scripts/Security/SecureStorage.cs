@@ -297,7 +297,8 @@ public static class SecureStorage
             string newJson = SecureJsonSerializer.Serialize(metaList);
             if (!string.IsNullOrEmpty(newJson))
             {
-                PlayerPrefs.SetString(StorageKeys.UsersList, newJson);
+                string encrypted = MetadataProtector.Encrypt(newJson);
+                PlayerPrefs.SetString(StorageKeys.UsersList, encrypted);
                 PlayerPrefs.Save();
                 Debug.Log($"New user list saved with {metaList.Users.Count} users");
             }
