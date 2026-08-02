@@ -135,6 +135,12 @@ User diary and mood data is encrypted with **AES-256-CBC** before being written 
 
 Key derivation uses PBKDF2-SHA256 over the user's actual password (available at login) with a random per-file salt. Files written before v1.1 are transparently re-encrypted with the new key on next successful login. See [Known Limitations](#known-limitations) for the security boundary of this approach and the planned fix.
 
+### Metadata index encryption
+
+The user index is now encrypted with an AES-256-GCM key from the AndroidKeyStore (Android) or local file key (other platforms) before being written to PlayerPrefs; 
+
+old plaintext indexes are upgraded automatically the first time they are run after an update.
+
 ### JSON deserialization hardening
 
 `TypeNameHandling` is explicitly set to `None` in `SecureJsonSerializer`, which neutralises the class of **insecure deserialization / remote code execution** vulnerabilities present in default Json.NET configurations. This is a known attack vector against Unity applications that use Json.NET carelessly.
@@ -211,19 +217,6 @@ Jobs are sequential with `needs:` dependencies — a secret leak or SAST finding
 
 These are **documented, understood trade-offs** — not oversights. Each has a corresponding issue and a planned fix in the roadmap.
 
-### [#1] Encryption key derived from non-secret material
-
-**Current behaviour:** The AES key is derived via PBKDF2 from `userId + Application.identifier`. Both are non-secret: the bundle ID is visible to anyone who unpacks the APK, and the `userId` (a GUID) is stored in plaintext in `PlayerPrefs` as part of the users index.
-
-**Impact:** An attacker with read access to the device filesystem — via ADB backup on a non-production device, a rooted device, or a forensic image — can recompute the encryption key without knowing the user's password, and decrypt all `.enc` files. The current scheme protects against casual file inspection but not against a determined attacker with filesystem access.
-
-**Planned fix (v1.1):** Derive the encryption key from the user's **actual password** via PBKDF2 with a persisted per-user salt. Data becomes irrecoverable if the password is lost — an accepted trade-off for a local-only privacy model.
-
-### [#2] User metadata stored unencrypted in PlayerPrefs
-
-The users index (username, email, display name, role, UserID) is written to `PlayerPrefs` as plaintext JSON for fast lookup. On a rooted device this metadata is readable without any key.
-
-**Planned fix (v1.1):** Encrypt the index with a key stored in the Android Keystore (hardware-backed where available).
 
 ### [#3] No ciphertext integrity check (encrypt-only, no HMAC/AEAD)
 
@@ -239,8 +232,8 @@ Dependabot monitors `github-actions` dependencies but does not parse `Packages/m
 
 ## Roadmap
 
-- [✓] **v1.1** — Derive encryption key from user password (fixes #1)
-- [ ] **v1.1** — Encrypt PlayerPrefs metadata index via Android Keystore (fixes #2)
+- [x] **v1.1** — Derive encryption key from user password (fixes #1)
+- [x] **v1.1** — Encrypt PlayerPrefs metadata index via Android Keystore (fixes #2)
 - [ ] **v1.2** — Migrate to AES-GCM for authenticated encryption (fixes #3)
 - [ ] **v1.3** — Biometric unlock via Android BiometricPrompt
 - [ ] **v1.3** — Automatic session lock after configurable inactivity timeout
