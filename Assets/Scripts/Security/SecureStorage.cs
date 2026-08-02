@@ -7,25 +7,16 @@ using UnityEngine;
 
 public static class SecureStorage
 {
-    private const int SaltSize = 32;
-    private const int KeySize = 32;
-    private const int Iterations = 100000;
+    private const int saltSize = 32;
+    private const int keySize = 32;
+    private const int iterations = 100000;
 
-    private static string GetEncryptionPassword(string userId)
-    {
-        using (SHA256 sha256 = SHA256.Create())
-        {
-            byte[] combined = Encoding.UTF8.GetBytes(userId + Application.identifier);
-            byte[] hash = sha256.ComputeHash(combined);
-            return Convert.ToBase64String(hash).Substring(0, 32);
-        }
-    }
 
-    public static void SaveEncryptedData<T>(T data, string userId)
+    public static void SaveEncryptedData<T>(T data, string userId, string password)
     {
-        if (data == null || string.IsNullOrEmpty(userId))
+        if (data == null || string.IsNullOrEmpty(userId) || string.IsNullOrEmpty(password))
         {
-            Debug.LogError("Data or userId is null");
+            Debug.LogError("Data, userId or password is null/empty");
             return;
         }
 
@@ -39,7 +30,7 @@ public static class SecureStorage
             }
 
             byte[] jsonBytes = Encoding.UTF8.GetBytes(json);
-            byte[] encrypted = Encrypt(jsonBytes, userId);
+            byte[] encrypted = Encrypt(jsonBytes, password);
 
             string filePath = GetFilePath(userId);
             string directory = Path.GetDirectoryName(filePath);
@@ -55,60 +46,92 @@ public static class SecureStorage
         }
     }
 
-    public static T LoadEncryptedData<T>(string userId) where T : new()
+    public static T LoadEncryptedData<T>(string userId, string password, out bool wasLegacyFormat) where T : new()
     {
-        if (string.IsNullOrEmpty(userId))
+        wasLegacyFormat = false;
+
+        if (string.IsNullOrEmpty(userId) || string.IsNullOrEmpty(password))
         {
-            Debug.LogError("UserId is null or empty");
+            Debug.LogError("UserId or password is null or empty");
             return new T();
         }
 
+        string filePath = GetFilePath(userId);
+        if (!File.Exists(filePath))
+        {
+            Debug.LogWarning($"File not found for user {userId}");
+            return new T();
+        }
+
+        byte[] encrypted;
         try
         {
-            string filePath = GetFilePath(userId);
-            if (!File.Exists(filePath))
-            {
-                Debug.LogWarning($"File not found for user {userId}");
-                return new T();
-            }
-
-            byte[] encrypted = File.ReadAllBytes(filePath);
+            encrypted = File.ReadAllBytes(filePath);
             if (encrypted == null || encrypted.Length == 0)
             {
                 Debug.LogWarning("Encrypted data is empty");
                 return new T();
             }
-
-            byte[] decrypted = Decrypt(encrypted, userId);
-            string json = Encoding.UTF8.GetString(decrypted);
-
-            if (string.IsNullOrEmpty(json))
-            {
-                Debug.LogWarning("Decrypted JSON is empty");
-                return new T();
-            }
-
-            return SecureJsonSerializer.Deserialize<T>(json);
         }
         catch (Exception e)
         {
-            Debug.LogError($"[SecureStorage] Load error for user {userId}: {e.Message}");
+            Debug.LogError($"[SecureStorage] Read error for user {userId}: {e.Message}");
             return new T();
+        }
+
+        try
+        {
+            byte[] decrypted = Decrypt(encrypted, password);
+            string json = Encoding.UTF8.GetString(decrypted);
+            if (string.IsNullOrEmpty(json)) throw new CryptographicException("Empty payload");
+
+            T result = SecureJsonSerializer.Deserialize<T>(json);
+            if (result == null) throw new CryptographicException("Deserialization failed");
+            return result;
+        }
+        catch
+        {
+            try
+            {
+                byte[] decryptedLegacy = DecryptLegacy(encrypted, userId);
+                string json = Encoding.UTF8.GetString(decryptedLegacy);
+
+                if (string.IsNullOrEmpty(json))
+                {
+                    Debug.LogWarning("Legacy decrypted JSON is empty");
+                    return new T();
+                }
+
+                T result = SecureJsonSerializer.Deserialize<T>(json);
+                if (result == null) return new T();
+
+                wasLegacyFormat = true;
+                return result;
+            }
+            catch (Exception e2)
+            {
+                Debug.LogError($"[SecureStorage] Load error for user {userId}: {e2.Message}");
+                return new T();
+            }
         }
     }
 
-    private static byte[] Encrypt(byte[] data, string userId)
+    public static T LoadEncryptedData<T>(string userId, string password) where T : new()
+    {
+        return LoadEncryptedData<T>(userId, password, out _);
+    }
+
+    private static byte[] Encrypt(byte[] data, string password)
     {
         using (Aes aes = Aes.Create())
         {
-            byte[] salt = new byte[SaltSize];
+            byte[] salt = new byte[saltSize];
             using (var rng = RandomNumberGenerator.Create())
             {
                 rng.GetBytes(salt);
             }
 
-            var key = DeriveKey(userId, salt);
-            aes.Key = key;
+            aes.Key = DeriveKey(password, salt);
             aes.GenerateIV();
 
             using (var ms = new MemoryStream())
@@ -127,25 +150,24 @@ public static class SecureStorage
         }
     }
 
-    private static byte[] Decrypt(byte[] encrypted, string userId)
+    private static byte[] Decrypt(byte[] encrypted, string password)
     {
         using (Aes aes = Aes.Create())
         {
-            byte[] salt = new byte[SaltSize];
-            Array.Copy(encrypted, 0, salt, 0, SaltSize);
+            byte[] salt = new byte[saltSize];
+            Array.Copy(encrypted, 0, salt, 0, saltSize);
 
-            var key = DeriveKey(userId, salt);
-            aes.Key = key;
+            aes.Key = DeriveKey(password, salt);
 
             byte[] iv = new byte[16];
-            Array.Copy(encrypted, SaltSize, iv, 0, 16);
+            Array.Copy(encrypted, saltSize, iv, 0, 16);
             aes.IV = iv;
 
             using (var ms = new MemoryStream())
             {
                 using (var cs = new CryptoStream(ms, aes.CreateDecryptor(), CryptoStreamMode.Write))
                 {
-                    cs.Write(encrypted, SaltSize + 16, encrypted.Length - SaltSize - 16);
+                    cs.Write(encrypted, saltSize + 16, encrypted.Length - saltSize - 16);
                     cs.FlushFinalBlock();
                 }
                 return ms.ToArray();
@@ -153,12 +175,111 @@ public static class SecureStorage
         }
     }
 
-    private static byte[] DeriveKey(string userId, byte[] salt)
+    private static byte[] DeriveKey(string password, byte[] salt)
     {
-        string password = GetEncryptionPassword(userId);
-        using (var pbkdf2 = new Rfc2898DeriveBytes(password, salt, Iterations, HashAlgorithmName.SHA256))
+        using (var pbkdf2 = new Rfc2898DeriveBytes(password, salt, iterations, HashAlgorithmName.SHA256))
         {
-            return pbkdf2.GetBytes(KeySize);
+            return pbkdf2.GetBytes(keySize);
+        }
+    }
+
+    private static string GetLegacyEncryptionPassword(string userId)
+    {
+        using (SHA256 sha256 = SHA256.Create())
+        {
+            byte[] combined = Encoding.UTF8.GetBytes(userId + Application.identifier);
+            byte[] hash = sha256.ComputeHash(combined);
+            return Convert.ToBase64String(hash).Substring(0, 32);
+        }
+    }
+
+    private static void SaveEncryptedDataLegacy<T>(T data, string userId)
+    {
+        if (data == null || string.IsNullOrEmpty(userId))
+        {
+            Debug.LogError("Data or userId is null");
+            return;
+        }
+
+        try
+        {
+            string json = SecureJsonSerializer.Serialize(data);
+            if (string.IsNullOrEmpty(json)) return;
+
+            byte[] jsonBytes = Encoding.UTF8.GetBytes(json);
+            byte[] encrypted = EncryptLegacy(jsonBytes, userId);
+
+            string filePath = GetFilePath(userId);
+            string directory = Path.GetDirectoryName(filePath);
+            if (!Directory.Exists(directory)) Directory.CreateDirectory(directory);
+
+            File.WriteAllBytes(filePath, encrypted);
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"[SecureStorage] Legacy save error for user {userId}: {e.Message}");
+        }
+    }
+
+    private static byte[] EncryptLegacy(byte[] data, string userId)
+    {
+        using (Aes aes = Aes.Create())
+        {
+            byte[] salt = new byte[saltSize];
+            using (var rng = RandomNumberGenerator.Create())
+            {
+                rng.GetBytes(salt);
+            }
+
+            aes.Key = DeriveLegacyKey(userId, salt);
+            aes.GenerateIV();
+
+            using (var ms = new MemoryStream())
+            {
+                ms.Write(salt, 0, salt.Length);
+                ms.Write(aes.IV, 0, aes.IV.Length);
+
+                using (var cs = new CryptoStream(ms, aes.CreateEncryptor(), CryptoStreamMode.Write))
+                {
+                    cs.Write(data, 0, data.Length);
+                    cs.FlushFinalBlock();
+                }
+                return ms.ToArray();
+            }
+        }
+    }
+
+    private static byte[] DecryptLegacy(byte[] encrypted, string userId)
+    {
+        using (Aes aes = Aes.Create())
+        {
+            byte[] salt = new byte[saltSize];
+            Array.Copy(encrypted, 0, salt, 0, saltSize);
+
+            aes.Key = DeriveLegacyKey(userId, salt);
+
+            byte[] iv = new byte[16];
+            Array.Copy(encrypted, saltSize, iv, 0, 16);
+            aes.IV = iv;
+
+            using (var ms = new MemoryStream())
+            {
+                using (var cs = new CryptoStream(ms, aes.CreateDecryptor(), CryptoStreamMode.Write))
+                {
+                    cs.Write(encrypted, saltSize + 16, encrypted.Length - saltSize - 16);
+                    cs.FlushFinalBlock();
+                }
+                return ms.ToArray();
+            }
+        }
+    }
+
+    private static byte[] DeriveLegacyKey(string userId, byte[] salt)
+    {
+        string password = GetLegacyEncryptionPassword(userId);
+        using (var pbkdf2 = new Rfc2898DeriveBytes(password, salt, iterations, HashAlgorithmName.SHA256))
+        {
+            return pbkdf2.GetBytes(keySize);
         }
     }
 
@@ -268,7 +389,7 @@ public static class SecureStorage
 
             try
             {
-                SaveEncryptedData(user, user.UserID);
+                SaveEncryptedDataLegacy(user, user.UserID);
 
                 result.MetaList.Users.Add(new UserMeta
                 {
