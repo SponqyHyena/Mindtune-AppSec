@@ -8,6 +8,7 @@ public class UserManager : MonoBehaviour
 
     private static readonly string USERS_LIST_KEY = StorageKeys.UsersList;
     public static UserData CurrentUser;
+    private static string sessionPassword;
 
     public enum RegistrationError
     {
@@ -106,7 +107,7 @@ public class UserManager : MonoBehaviour
             UserData newUser = new UserData(name, email, normalizedUsername, passwordHash, role);
             usersCache[normalizedUsername] = newUser;
 
-            SecureStorage.SaveEncryptedData(newUser, newUser.UserID);
+            SecureStorage.SaveEncryptedData(newUser, newUser.UserID, password);
             SaveUsersList();
 
             return RegistrationError.Success;
@@ -140,6 +141,12 @@ public class UserManager : MonoBehaviour
             return false;
         }
 
+        if (string.IsNullOrEmpty(password))
+        {
+            Debug.LogError("Password is empty");
+            return false;
+        }
+
         if (!usersCache.ContainsKey(normalizedUsername))
         {
             Debug.LogError($"User {normalizedUsername} not found");
@@ -153,23 +160,31 @@ public class UserManager : MonoBehaviour
             return false;
         }
 
-        UserData user = SecureStorage.LoadEncryptedData<UserData>(userId);
+        bool wasLegacyFormat;
+        UserData user = SecureStorage.LoadEncryptedData<UserData>(userId, password, out wasLegacyFormat);
         if (user == null || string.IsNullOrEmpty(user.UserID))
         {
             Debug.LogError("Failed to load user data");
             return false;
         }
 
-        usersCache[normalizedUsername] = user;
-
-        if (PasswordHasher.VerifyPassword(password, user.PasswordHash))
+        if (!PasswordHasher.VerifyPassword(password, user.PasswordHash))
         {
-            CurrentUser = user;
-            return true;
+            Debug.LogError("Invalid password");
+            return false;
         }
 
-        Debug.LogError("Invalid password");
-        return false;
+        usersCache[normalizedUsername] = user;
+        CurrentUser = user;
+        sessionPassword = password;
+
+        if (wasLegacyFormat)
+        {
+            SecureStorage.SaveEncryptedData(user, userId, password);
+            Debug.Log($"[UserManager] Upgraded encryption for user {userId}");
+        }
+
+        return true;
     }
 
     private void SaveUsersList()
@@ -213,19 +228,24 @@ public class UserManager : MonoBehaviour
         }
 
         user.PasswordHash = PasswordHasher.HashPassword(newPassword);
+
+        if (user == CurrentUser)
+            sessionPassword = newPassword;
+
         SaveUsersData();
     }
 
     public void SaveUsersData()
     {
-        if (CurrentUser == null) return;
-        SecureStorage.SaveEncryptedData(CurrentUser, CurrentUser.UserID);
+        if (CurrentUser == null || string.IsNullOrEmpty(sessionPassword)) return;
+        SecureStorage.SaveEncryptedData(CurrentUser, CurrentUser.UserID, sessionPassword);
         SaveUsersList();
     }
 
     public void Logout()
     {
         CurrentUser = null;
+        sessionPassword = null;
     }
 
     [System.Serializable]

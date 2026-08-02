@@ -6,6 +6,7 @@ public class SecurityTests
 {
     private const string TestUserId = "test-user-123";
     private const string TestPassword = "MyTestP@ssw0rd!";
+    private const string TestPassword2 = "AnotherP@ss1";
 
 
     [Test]
@@ -58,16 +59,14 @@ public class SecurityTests
     [Test]
     public void SecureStorage_RoundTrip_SavesAndLoadsDataCorrectly()
     {
-        var testData = new TestData
-        {
+        var testData = new TestData { 
             Name = "Test User",
             Value = 42,
-            IsActive = true
+            IsActive = true 
         };
 
-        SecureStorage.SaveEncryptedData(testData, TestUserId);
-
-        TestData loadedData = SecureStorage.LoadEncryptedData<TestData>(TestUserId);
+        SecureStorage.SaveEncryptedData(testData, TestUserId, TestPassword);
+        TestData loadedData = SecureStorage.LoadEncryptedData<TestData>(TestUserId, TestPassword);
 
         Assert.IsNotNull(loadedData, "Загруженные данные не должны быть null.");
         Assert.AreEqual(testData.Name, loadedData.Name, "Имя должно совпадать.");
@@ -80,8 +79,8 @@ public class SecurityTests
     {
         var testData = new TestData();
 
-        SecureStorage.SaveEncryptedData(testData, TestUserId);
-        TestData loadedData = SecureStorage.LoadEncryptedData<TestData>(TestUserId);
+        SecureStorage.SaveEncryptedData(testData, TestUserId, TestPassword);
+        TestData loadedData = SecureStorage.LoadEncryptedData<TestData>(TestUserId, TestPassword);
 
         Assert.IsNotNull(loadedData, "Даже пустые данные должны загружаться.");
         Assert.IsNull(loadedData.Name, "Имя должно быть null.");
@@ -92,7 +91,7 @@ public class SecurityTests
     [Test]
     public void SecureStorage_LoadNonExistentUser_ReturnsDefault()
     {
-        var loadedData = SecureStorage.LoadEncryptedData<TestData>("non-existent-user");
+        var loadedData = SecureStorage.LoadEncryptedData<TestData>("non-existent-user", TestPassword);
 
         Assert.IsNotNull(loadedData, "Для несуществующего пользователя должен возвращаться новый объект.");
         Assert.IsNull(loadedData.Name, "Данные должны быть пустыми.");
@@ -108,8 +107,8 @@ public class SecurityTests
             IsActive = false
         };
 
-        SecureStorage.SaveEncryptedData(testData, TestUserId);
-        TestData loadedData = SecureStorage.LoadEncryptedData<TestData>(TestUserId);
+        SecureStorage.SaveEncryptedData(testData, TestUserId, TestPassword);
+        TestData loadedData = SecureStorage.LoadEncryptedData<TestData>(TestUserId, TestPassword);
 
         Assert.IsNotNull(loadedData, "Данные не должны быть null.");
         Assert.AreEqual(testData.Name, loadedData.Name, "Специальные символы должны сохраняться.");

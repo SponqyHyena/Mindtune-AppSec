@@ -133,7 +133,7 @@ User diary and mood data is encrypted with **AES-256-CBC** before being written 
 [salt 32B][IV 16B][ciphertext...]  →  {userId}.enc
 ```
 
-Key derivation uses PBKDF2-SHA256 over a value derived from `userId + Application.identifier`. See [Known Limitations](#known-limitations) for the security boundary of this approach and the planned fix.
+Key derivation uses PBKDF2-SHA256 over the user's actual password (available at login) with a random per-file salt. Files written before v1.1 are transparently re-encrypted with the new key on next successful login. See [Known Limitations](#known-limitations) for the security boundary of this approach and the planned fix.
 
 ### JSON deserialization hardening
 
@@ -239,7 +239,7 @@ Dependabot monitors `github-actions` dependencies but does not parse `Packages/m
 
 ## Roadmap
 
-- [ ] **v1.1** — Derive encryption key from user password (fixes #1)
+- [✓] **v1.1** — Derive encryption key from user password (fixes #1)
 - [ ] **v1.1** — Encrypt PlayerPrefs metadata index via Android Keystore (fixes #2)
 - [ ] **v1.2** — Migrate to AES-GCM for authenticated encryption (fixes #3)
 - [ ] **v1.3** — Biometric unlock via Android BiometricPrompt
